@@ -55,9 +55,9 @@ export function App() {
             <input id="projectImageInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
             <button className="project-image-remove" id="projectImageRemove" type="button" hidden>Remove</button>
           </div>
-          <strong id="plaqueName">Wild Plum XA</strong>
-          <span id="plaqueVehicle">XA Coupe · details to verify</span>
-          <div className="project-code"><span id="plaqueCode">WPXA-001</span><span id="plaqueVersion">v0.1</span></div>
+          <strong id="plaqueName">Project vehicle</strong>
+          <span id="plaqueVehicle">Vehicle details to verify</span>
+          <div className="project-code"><span id="plaqueCode">PRJ-001</span><span id="plaqueVersion">v0.1</span></div>
         </div>
 
         <nav id="mainNav" />
