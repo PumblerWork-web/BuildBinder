@@ -1,0 +1,26 @@
+{
+  "name": "build-binder",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "description": "A digital-first, blueprint-style vehicle restoration workspace.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "typescript": "5.6.3",
+    "vite": "5.4.21"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

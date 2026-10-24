@@ -1,0 +1,13 @@
+{
+  "name": "The Build Binder",
+  "short_name": "Build Binder",
+  "description": "A digital-first interactive vehicle restoration binder with auto-growing notes and project photo galleries.",
+  "start_url": "/#dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#04101a",
+  "theme_color": "#071a2a",
+  "icons": [
+    { "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

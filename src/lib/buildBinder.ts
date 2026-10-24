@@ -1,0 +1,788 @@
+// @ts-nocheck
+
+/**
+ * Build Binder application engine.
+ *
+ * Kept deliberately close to the proven v0.3 standalone implementation so
+ * existing browser data and behaviour remain compatible during the initial
+ * React/Vite migration. React owns the persistent app shell; this module owns
+ * the binder's local-first data model and interactive workspace.
+ */
+export function initBuildBinder(): void {
+  'use strict';
+
+  const STORAGE_KEY = 'theBuildBinder.v1';
+  const APP_VERSION = '0.3.0';
+
+  const galleryDefinitions = {
+    identity: ['Identity / compliance plate','VIN or chassis stamping','Engine identifier','Transmission / axle identifier','Surviving paint evidence','Trim / interior evidence'],
+    baseline: ['Front three-quarter','Rear three-quarter','Left side','Right side','Engine bay','Cabin / dashboard','Underbody / structure','Boot / load area'],
+    body: ['Original or surviving finish','Approved spray-out','Repair evidence','Finished result'],
+    interior: ['Interior before','Dashboard / controls','Trim reference','Interior finished'],
+    milestones: ['Before — repeatable angle','After — same angle','Detail before','Detail after']
+  };
+
+  const legacyPhotoGallery = {
+    'identity-plate':'identity', vin:'identity', 'engine-id':'identity', 'transmission-id':'identity', 'paint-evidence':'identity', 'trim-evidence':'identity',
+    'front-34':'baseline', 'rear-34':'baseline', 'left-side':'baseline', 'right-side':'baseline', 'engine-bay':'baseline', cabin:'baseline', underbody:'baseline', boot:'baseline',
+    'paint-before':'body', 'spray-out':'body', 'body-repair':'body', 'paint-final':'body',
+    'interior-before':'interior', dashboard:'interior', 'trim-reference':'interior', 'interior-final':'interior',
+    'milestone-before':'milestones', 'milestone-after':'milestones', 'detail-before':'milestones', 'detail-after':'milestones'
+  };
+
+  const sectionDefs = [
+    { id: 'dashboard', index: '00', label: 'Command centre', group: 'OVERVIEW' },
+    { id: 'identity', index: '01', label: 'Identity & history', group: 'PROJECT RECORD' },
+    { id: 'baseline', index: '02', label: 'Baseline condition', group: 'PROJECT RECORD' },
+    { id: 'vision', index: '03', label: 'Vision & scope', group: 'PROJECT RECORD' },
+    { id: 'planning', index: '04', label: 'Planning & decisions', group: 'CONTROL' },
+    { id: 'disassembly', index: '05', label: 'Disassembly & parts', group: 'CONTROL' },
+    { id: 'body', index: '06', label: 'Body, shell & paint', group: 'BUILD SYSTEMS' },
+    { id: 'chassis', index: '07', label: 'Chassis, brakes & wheels', group: 'BUILD SYSTEMS' },
+    { id: 'powertrain', index: '08', label: 'Powertrain & support', group: 'BUILD SYSTEMS' },
+    { id: 'electrical', index: '09', label: 'Electrical & controls', group: 'BUILD SYSTEMS' },
+    { id: 'interior', index: '10', label: 'Interior, trim & glass', group: 'BUILD SYSTEMS' },
+    { id: 'commercial', index: '11', label: 'Procurement & budget', group: 'DELIVERY' },
+    { id: 'worklog', index: '12', label: 'Work, issues & media', group: 'DELIVERY' },
+    { id: 'handover', index: '13', label: 'Compliance & handover', group: 'DELIVERY' },
+    { id: 'library', index: '14', label: 'Reference library', group: 'DELIVERY' },
+    { id: 'design', index: 'DL', label: 'Binder design lab', group: 'REFINE THE BINDER' }
+  ];
+
+  const tableSchemas = {
+    evidence: {
+      columns: [
+        ['id','Evidence ID','text'], ['item','Evidence / claim','text'], ['source','Source / link','text'],
+        ['supports','What it supports','text'], ['status','Confidence','status']
+      ],
+      blank: { id:'EV-', item:'', source:'', supports:'', status:'TO VERIFY' }
+    },
+    history: {
+      columns: [['date','Date / era','text'],['event','Event or claim','text'],['source','Source','text'],['status','Confidence','status']],
+      blank: { date:'', event:'', source:'', status:'TO VERIFY' }
+    },
+    condition: {
+      columns: [['area','Area','text'],['condition','Observed condition','text'],['priority','Priority','priority'],['evidence','Evidence ID','text']],
+      blank: { area:'', condition:'', priority:'MEDIUM', evidence:'' }
+    },
+    decisions: {
+      columns: [['id','Decision ID','text'],['decision','Decision / options','text'],['chosen','Direction & reason','text'],['date','Date','date'],['status','Status','status']],
+      blank: { id:'DEC-', decision:'', chosen:'', date:'', status:'DRAFT' }
+    },
+    risks: {
+      columns: [['id','Risk ID','text'],['risk','Risk / consequence','text'],['likelihood','Likelihood','risk'],['impact','Impact','risk'],['control','Control / next action','text'],['owner','Owner','text']],
+      blank: { id:'R-', risk:'', likelihood:'MEDIUM', impact:'MEDIUM', control:'', owner:'' }
+    },
+    actions: {
+      columns: [['priority','Priority','priority'],['action','Action','text'],['owner','Owner','text'],['due','Due','date'],['status','Status','taskstatus']],
+      blank: { priority:'MEDIUM', action:'', owner:'', due:'', status:'NOT STARTED' }
+    },
+    inventory: {
+      columns: [['tag','Tag','text'],['part','Part / assembly','text'],['condition','Condition','text'],['disposition','Disposition','disposition'],['location','Location','text'],['status','Status','taskstatus']],
+      blank: { tag:'', part:'', condition:'', disposition:'RETAIN', location:'', status:'NOT STARTED' }
+    },
+    body: {
+      columns: [['area','Area','text'],['condition','Condition / evidence','text'],['strategy','Repair strategy','text'],['specialist','Specialist','text'],['status','Status','taskstatus']],
+      blank: { area:'', condition:'', strategy:'', specialist:'', status:'NOT STARTED' }
+    },
+    systems: {
+      columns: [['system','System','text'],['existing','Existing / evidence','text'],['planned','Planned work / target','text'],['parts','Parts / supplier','text'],['verification','Verification','text'],['status','Status','taskstatus']],
+      blank: { system:'', existing:'', planned:'', parts:'', verification:'', status:'NOT STARTED' }
+    },
+    circuits: {
+      columns: [['circuit','Circuit / load','text'],['supply','Supply / fuse','text'],['route','Route / connector','text'],['earth','Earth','text'],['test','Test result','text'],['status','Status','taskstatus']],
+      blank: { circuit:'', supply:'', route:'', earth:'', test:'', status:'NOT STARTED' }
+    },
+    trim: {
+      columns: [['area','Area','text'],['existing','Existing / evidence','text'],['target','Target / material','text'],['supplier','Supplier / craftsperson','text'],['status','Status','taskstatus']],
+      blank: { area:'', existing:'', target:'', supplier:'', status:'NOT STARTED' }
+    },
+    procurement: {
+      columns: [['id','PO / ID','text'],['item','Part / service','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Fit / status','taskstatus']],
+      blank: { id:'P-', item:'', supplier:'', ordered:'', cost:'', status:'NOT STARTED' }
+    },
+    budget: {
+      columns: [['category','Category','text'],['budget','Budget','number'],['committed','Committed','number'],['paid','Paid','number'],['forecast','Forecast','number']],
+      blank: { category:'', budget:'', committed:'', paid:'', forecast:'' }
+    },
+    worklog: {
+      columns: [['date','Date','date'],['hours','Hours','number'],['area','Area','text'],['work','Work completed','text'],['evidence','Parts / evidence','text'],['by','By','text']],
+      blank: { date:'', hours:'', area:'', work:'', evidence:'', by:'' }
+    },
+    issues: {
+      columns: [['id','Issue ID','text'],['issue','Issue / change','text'],['impact','Impact','text'],['action','Action / decision','text'],['owner','Owner','text'],['status','Status','taskstatus']],
+      blank: { id:'ISS-', issue:'', impact:'', action:'', owner:'', status:'OPEN' }
+    },
+    compliance: {
+      columns: [['requirement','Requirement','text'],['authority','Authority / specialist','text'],['evidence','Evidence / certificate','text'],['date','Date','date'],['status','Status','taskstatus']],
+      blank: { requirement:'', authority:'', evidence:'', date:'', status:'NOT STARTED' }
+    },
+    tests: {
+      columns: [['stage','Stage','text'],['checks','Checks / limits','text'],['result','Result','text'],['issues','Issues raised','text'],['approved','Approved by','text'],['status','Status','taskstatus']],
+      blank: { stage:'', checks:'', result:'', issues:'', approved:'', status:'NOT STARTED' }
+    },
+    references: {
+      columns: [['id','Ref ID','text'],['document','Document / source','text'],['version','Version / date','text'],['location','Location / link','text'],['used','Used for','text']],
+      blank: { id:'REF-', document:'', version:'', location:'', used:'' }
+    },
+    refinements: {
+      columns: [['priority','Priority','priority'],['change','Requested change','text'],['reason','Reason / outcome','text'],['status','Decision','taskstatus']],
+      blank: { priority:'MEDIUM', change:'', reason:'', status:'OPEN' }
+    }
+  };
+  tableSchemas.chassis = tableSchemas.systems;
+  tableSchemas.powertrain = tableSchemas.systems;
+
+  const phaseNames = ['Discover','Strip & catalogue','Body & structure','Systems rebuild','Finish & assembly','Test & handover'];
+
+  const baselineChecks = [
+    'Stabilise the vehicle and confirm safe lifting points.', 'Isolate battery and electrical hazards.',
+    'Assess fuel, oil, coolant and brake-fluid leakage.', 'Protect openings from moisture and pests.',
+    'Photograph fragile, rare or loose items.', 'Tag parts at risk of being separated.'
+  ];
+  const disassemblyChecks = [
+    'Photograph item before removal.', 'Photograph orientation and routing.', 'Bag and label fasteners with their assembly.',
+    'Record condition and repair decision.', 'Protect delicate finishes and glass.', 'Update inventory before moving to the next assembly.'
+  ];
+  const acceptanceChecks = [
+    'Part number and application verified.', 'Condition checked on arrival.', 'Dimensions and orientation compared before modification.',
+    'Receipt, warranty and serial number saved.', 'Return deadline recorded.', 'Inventory and budget updated.'
+  ];
+  const preStartChecks = [
+    'Fluids filled, primed and independently checked.', 'Fuel, coolant, oil and brake systems leak-tested.',
+    'Electrical protection and earths verified.', 'Throttle, clutch, selector and steering travel clear.',
+    'Fire extinguisher and shutdown plan ready.', 'Observers have roles and safe positions.'
+  ];
+  const handoverChecks = [
+    'Final target specification marked VERIFIED.', 'Current wiring diagram and fuse list.', 'Fluid, filter and service specification.',
+    'Alignment and setup sheet.', 'Parts, paint and trim references.', 'Receipts, warranties and certificates.',
+    'Known limitations or accepted defects.', 'Photo story and valuation or insurance record.'
+  ];
+
+  function uid(prefix='id') { return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`; }
+  function today() { return new Date().toISOString().slice(0,10); }
+  function clone(value) { return JSON.parse(JSON.stringify(value)); }
+  function esc(value='') { return String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+  function slug(value='') { return String(value).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
+  function money(value) { return new Intl.NumberFormat('en-AU',{style:'currency',currency:'AUD',maximumFractionDigits:0}).format(Number(value)||0); }
+
+  function row(data) { return { _id: uid('row'), ...data }; }
+
+  function starterProject() {
+    return {
+      id: 'wild-plum-xa',
+      meta: {
+        name: 'Wild Plum XA', vehicle: 'XA Coupe · details to verify', code: 'WPXA-001', version: 'v0.1',
+        phase: 0, status: 'DRAFT', owner: '', updated: '2026-10-23', showcase: true
+      },
+      fields: {
+        manufacturer: '', model: 'XA', series: '', bodyStyle: 'Coupe', buildDate: '', vin: '', registration: '',
+        engineNumber: '', transmissionId: '', paintCode: '', trimCode: '', odometer: '', identityStatus: 'TO VERIFY',
+        historySummary: 'Showcase project only. Factory colour, codes, options and mechanical specifications remain to verify.',
+        intendedUse: 'Road use with a period-respectful character', approach: 'SYMPATHETIC', finishStandard: 'DRIVER / SHOW',
+        authenticity: 'High where verified', performanceGoal: '', reliabilityGoal: 'Road-usable, serviceable and documented',
+        comfortGoal: '', nonNegotiables: 'Preserve provenance and original evidence before irreversible work.',
+        success: 'Create a documented, period-respectful and road-usable XA Coupe with Wild Plum as its signature identity. Preserve evidence before disassembly and verify specification claims.',
+        inScope: 'Baseline, identity research, shell assessment and restoration planning.', deferred: '', outScope: '',
+        tagPrefix: 'WPXA', areaCodes: 'BDY / ENG / DRV / CHS / ELE / INT', containerFormat: 'Zone / shelf / tub / bag',
+        colourDirection: 'Wild Plum — final code and originality TO VERIFY', paintSystem: '', glossTarget: '', protection: '',
+        engineId: '', transmissionBuildId: '', axleId: '', builder: '', targetOutput: '', buildSheet: '',
+        voltage: '12 V — verify current configuration', battery: '', mainProtection: '', earthStrategy: '', harness: '', diagram: '',
+        binderLocation: '', mediaLocation: '', nextMilestone: 'Baseline captured and identity evidence logged', nextReview: '',
+        designUseful: '', designMissing: '', designRemove: '', designDetail: '', designNotes: ''
+      },
+      checklists: {
+        baseline: baselineChecks.map((label,i)=>({label,done:i===3})),
+        disassembly: disassemblyChecks.map(label=>({label,done:false})),
+        acceptance: acceptanceChecks.map(label=>({label,done:false})),
+        prestart: preStartChecks.map(label=>({label,done:false})),
+        handover: handoverChecks.map(label=>({label,done:false}))
+      },
+      tables: {
+        evidence: [row({id:'EV-001',item:'Project name and vehicle description supplied by owner',source:'Project brief',supports:'Showcase identity',status:'VERIFIED'}), row({id:'EV-002',item:'Factory paint colour / code',source:'Vehicle evidence required',supports:'Original specification',status:'TO VERIFY'})],
+        history: [row({date:'',event:'Acquisition / ownership history',source:'To be recorded',status:'TO VERIFY'})],
+        condition: ['Body / shell','Chassis / structure','Engine / fuel / cooling','Driveline','Brakes / steering / suspension','Electrical','Interior / glass / seals'].map(area=>row({area,condition:'',priority:'MEDIUM',evidence:''})),
+        decisions: [row({id:'DEC-001',decision:'Restoration approach',chosen:'Develop after baseline and owner goals',date:'',status:'DRAFT'})],
+        risks: [row({id:'R-001',risk:'Hidden corrosion expands body scope',likelihood:'MEDIUM',impact:'HIGH',control:'Complete structured inspection before finish commitment',owner:''})],
+        actions: [
+          row({priority:'HIGH',action:'Photograph whole vehicle, identifiers, gaps, damage and loose parts',owner:'',due:'',status:'NOT STARTED'}),
+          row({priority:'HIGH',action:'Capture exact identifier text and locations',owner:'',due:'',status:'NOT STARTED'}),
+          row({priority:'HIGH',action:'Assess shell, corrosion and immediate preservation needs',owner:'',due:'',status:'NOT STARTED'}),
+          row({priority:'MEDIUM',action:'Set initial scope boundaries and decision gates',owner:'',due:'',status:'NOT STARTED'})
+        ],
+        inventory: [],
+        body: ['Front structure / panels','Cabin / floor / sills','Rear structure / quarters','Doors / hinges / gaps','Boot / bonnet / closures','Underbody / mounts'].map(area=>row({area,condition:'',strategy:'',specialist:'',status:'NOT STARTED'})),
+        chassis: ['Front suspension','Rear suspension','Steering','Brakes','Wheels / tyres','Bearings / hubs'].map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'})),
+        powertrain: ['Engine','Transmission','Differential / axle','Fuel','Cooling','Induction','Exhaust','Lubrication'].map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'})),
+        circuits: ['Starting / charging','Ignition / engine','Lighting','Instruments','Accessories','Added circuits'].map(circuit=>row({circuit,supply:'',route:'',earth:'',test:'',status:'NOT STARTED'})),
+        trim: ['Seats / upholstery','Carpet / insulation','Dashboard / instruments','Door / quarter trims','Headlining / roof trim','Brightwork / hardware','Glass / seals'].map(area=>row({area,existing:'',target:'',supplier:'',status:'NOT STARTED'})),
+        procurement: [],
+        budget: ['Vehicle / acquisition','Body / paint','Powertrain','Chassis / brakes / wheels','Electrical','Interior / glass / trim','Compliance / testing','Contingency'].map(category=>row({category,budget:'',committed:'',paid:'',forecast:''})),
+        worklog: [], issues: [],
+        compliance: ['Ownership / registration','Identity / modification approval','Roadworthiness / inspection','Insurance / valuation'].map(requirement=>row({requirement,authority:'',evidence:'',date:'',status:'NOT STARTED'})),
+        tests: ['Static / no start','First start','Workshop movement','Low-speed road','Extended road','Final acceptance'].map(stage=>row({stage,checks:'',result:'',issues:'',approved:'',status:'NOT STARTED'})),
+        references: [], refinements: []
+      },
+      photos: {},
+      photoGalleries: { identity:[], baseline:[], body:[], interior:[], milestones:[] },
+      projectImage: null,
+      preferences: { density:'standard', contrast:'standard', accent:'blueprint', printScope:'current' }
+    };
+  }
+
+  function genericProject(name='Untitled restoration', vehicle='Vehicle details to enter') {
+    const project = starterProject();
+    project.id = uid('project');
+    project.meta = { name, vehicle, code:'NEW-001', version:'v0.1', phase:0, status:'DRAFT', owner:'', updated:today(), showcase:false };
+    project.fields = Object.fromEntries(Object.keys(project.fields).map(k=>[k,'']));
+    project.fields.identityStatus = 'DRAFT';
+    project.fields.approach = 'UNDECIDED';
+    project.fields.nextMilestone = 'Complete project snapshot and baseline record';
+    project.tables = Object.fromEntries(Object.keys(project.tables).map(k=>[k,[]]));
+    project.tables.condition = ['Body / shell','Chassis / structure','Engine / fuel / cooling','Driveline','Brakes / steering / suspension','Electrical','Interior / glass / seals'].map(area=>row({area,condition:'',priority:'MEDIUM',evidence:''}));
+    project.tables.budget = ['Vehicle / acquisition','Body / paint','Powertrain','Chassis / brakes / wheels','Electrical','Interior / glass / trim','Compliance / testing','Contingency'].map(category=>row({category,budget:'',committed:'',paid:'',forecast:''}));
+    project.checklists = {
+      baseline: baselineChecks.map(label=>({label,done:false})), disassembly: disassemblyChecks.map(label=>({label,done:false})),
+      acceptance: acceptanceChecks.map(label=>({label,done:false})), prestart: preStartChecks.map(label=>({label,done:false})), handover: handoverChecks.map(label=>({label,done:false}))
+    };
+    project.projectImage = null;
+    project.photoGalleries = { identity:[], baseline:[], body:[], interior:[], milestones:[] };
+    return project;
+  }
+
+  function ensureProjectShape(project) {
+    project.photos=project.photos||{};
+    project.photoGalleries=project.photoGalleries||{};
+    Object.keys(galleryDefinitions).forEach(key=>{ if(!Array.isArray(project.photoGalleries[key])) project.photoGalleries[key]=[]; });
+    // Preserve photographs created in v0.1/v0.2 by moving fixed-slot images into the new open galleries.
+    Object.entries(project.photos).forEach(([legacyKey,dataUrl])=>{
+      const gallery=legacyPhotoGallery[legacyKey];
+      if(!gallery || !dataUrl || project.photoGalleries[gallery].some(photo=>photo.legacyKey===legacyKey)) return;
+      const label=galleryDefinitions[gallery]?.find((_,i)=>Object.keys(legacyPhotoGallery).filter(key=>legacyPhotoGallery[key]===gallery)[i]===legacyKey) || legacyKey;
+      project.photoGalleries[gallery].push({ id:uid('photo'), dataUrl, name:legacyKey, caption:label, legacyKey, added:new Date().toISOString() });
+    });
+    project.preferences=project.preferences||{density:'standard',contrast:'standard',accent:'blueprint',printScope:'current'};
+    return project;
+  }
+
+  function loadState() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (saved?.projects?.length) { saved.projects.forEach(ensureProjectShape); return saved; }
+    } catch (error) { console.warn('Could not load saved binder',error); }
+    const project = starterProject();
+    return { version:APP_VERSION, activeProjectId:project.id, projects:[project] };
+  }
+
+  let state = loadState();
+  let activeSection = location.hash.replace('#','') || 'dashboard';
+  if (!sectionDefs.some(s=>s.id===activeSection)) activeSection='dashboard';
+  let saveTimer;
+
+  const $ = selector => document.querySelector(selector);
+  const app = $('#app');
+  const projectSelect = $('#projectSelect');
+  const nav = $('#mainNav');
+
+  function activeProject() { return state.projects.find(p=>p.id===state.activeProjectId) || state.projects[0]; }
+  function persistStateNow(message='',successToast=false) {
+    try {
+      activeProject().meta.updated=today();
+      state.version=APP_VERSION;
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+      $('#saveState').classList.remove('saving');
+      $('#saveState').innerHTML='<i></i> Saved locally';
+      if(successToast && message) toast('Saved',message);
+      updateProjectChrome();
+      return true;
+    } catch(error) {
+      $('#saveState').classList.remove('saving');
+      $('#saveState').innerHTML='<i></i> Not saved';
+      toast('Browser storage is full','This change could not be saved locally. Export a backup, remove some photos, or use smaller images.');
+      console.warn('Build Binder local save failed',error);
+      return false;
+    }
+  }
+
+  function queueSave(message='Changes saved') {
+    $('#saveState').classList.add('saving');
+    $('#saveState').innerHTML='<i></i> Saving…';
+    clearTimeout(saveTimer);
+    saveTimer=setTimeout(()=>{
+      persistStateNow(message,Boolean(message));
+    },400);
+  }
+
+  function toast(title,message) {
+    const el=document.createElement('div'); el.className='toast';
+    el.innerHTML=`<strong>${esc(title)}</strong><span>${esc(message)}</span>`;
+    $('#toastRegion').append(el);
+    setTimeout(()=>el.remove(),2600);
+  }
+
+  function updateProjectChrome() {
+    const p=activeProject();
+    projectSelect.innerHTML=state.projects.map(x=>`<option value="${esc(x.id)}" ${x.id===p.id?'selected':''}>${esc(x.meta.name)}${x.meta.showcase?' · SHOWCASE':''}</option>`).join('');
+    $('#plaqueName').textContent=p.meta.name;
+    $('#plaqueVehicle').textContent=p.meta.vehicle || 'Vehicle details to enter';
+    $('#plaqueCode').textContent=p.meta.code || 'NO CODE';
+    $('#plaqueVersion').textContent=p.meta.version || 'v0.1';
+    const projectImage=p.projectImage?.dataUrl;
+    const preview=$('#projectImagePreview');
+    preview.hidden=!projectImage;
+    preview.src=projectImage || '';
+    preview.alt=projectImage ? `${p.meta.name} project image or logo` : '';
+    $('#projectImagePlaceholder').hidden=Boolean(projectImage);
+    $('#projectImageActionLabel').textContent=projectImage ? '↻ Change image' : '＋ Add image';
+    $('#projectImageRemove').hidden=!projectImage;
+    document.body.classList.toggle('compact',p.preferences?.density==='compact');
+    document.body.classList.toggle('high-contrast',p.preferences?.contrast==='high');
+  }
+
+  function sectionCount(id,p=activeProject()) {
+    const map={
+      identity:(p.tables.evidence?.length||0)+(p.tables.history?.length||0), baseline:p.tables.condition?.length||0,
+      planning:(p.tables.actions?.length||0)+(p.tables.decisions?.length||0)+(p.tables.risks?.length||0),
+      disassembly:p.tables.inventory?.length||0, body:p.tables.body?.length||0, chassis:p.tables.chassis?.length||0,
+      powertrain:p.tables.powertrain?.length||0, electrical:p.tables.circuits?.length||0, interior:p.tables.trim?.length||0,
+      commercial:(p.tables.procurement?.length||0)+(p.tables.budget?.length||0), worklog:(p.tables.worklog?.length||0)+(p.tables.issues?.length||0),
+      handover:(p.tables.compliance?.length||0)+(p.tables.tests?.length||0), library:p.tables.references?.length||0,
+      design:p.tables.refinements?.length||0
+    };
+    return map[id] ?? '';
+  }
+
+  function renderNav() {
+    let group='';
+    nav.innerHTML=sectionDefs.map(s=>{
+      const heading=s.group!==group ? `<div class="nav-group-label">${group=s.group}</div>` : '';
+      return `${heading}<button class="nav-item ${s.id===activeSection?'active':''}" data-section="${s.id}"><span class="nav-index">${s.index}</span><strong>${s.label}</strong><span class="nav-count">${sectionCount(s.id)}</span></button>`;
+    }).join('');
+  }
+
+  function header(section,title,description,actions=true) {
+    return `<div class="page-header">
+      <div class="page-title-block"><span class="sheet-index">${section}</span><div><span class="eyebrow">BUILD BINDER · SHEET ${section}</span><h1>${esc(title)}</h1><p>${esc(description)}</p></div></div>
+      ${actions?`<div class="page-actions"><button class="button ghost small" data-action="quick-add">＋ Quick add</button><button class="button ghost small" data-action="print">Print view</button></div>`:''}
+    </div>`;
+  }
+
+  function card(title,body,{span='',meta='',className=''}={}) {
+    return `<section class="card ${span} ${className}"><header class="card-header"><h2>${title}</h2>${meta?`<small>${meta}</small>`:''}</header><div class="card-body">${body}</div></section>`;
+  }
+
+  const fieldTypes = {
+    status:['DRAFT','TO VERIFY','VERIFIED','SUPERSEDED'],
+    projectStatus:['DRAFT','ACTIVE','PAUSED','COMPLETE'],
+    approach:['UNDECIDED','PRESERVATION','FACTORY-CORRECT','SYMPATHETIC','RESTOMOD','CUSTOM'],
+    finish:['DRIVER','DRIVER / SHOW','SHOW','CONCOURS','COMPETITION','OTHER']
+  };
+
+  function field(label,key,{type='text',placeholder='Click or tap to enter…',span='',options=null,path='fields'}={}) {
+    const p=activeProject();
+    const source=path==='meta'?p.meta:p.fields;
+    const value=source[key] ?? '';
+    let control;
+    const opts=options || fieldTypes[type];
+    if (opts) {
+      control=`<select data-field="${key}" data-path="${path}">${opts.map(o=>`<option value="${esc(o)}" ${value===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+    } else if(type==='textarea') {
+      control=`<textarea class="auto-grow" data-field="${key}" data-path="${path}" placeholder="${esc(placeholder)}" rows="3">${esc(value)}</textarea>`;
+    } else {
+      control=`<input data-field="${key}" data-path="${path}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}">`;
+    }
+    return `<div class="field ${span}"><label>${esc(label)}</label>${control}</div>`;
+  }
+
+  function badge(status='DRAFT') { return `<span class="badge ${slug(status)}">${esc(status)}</span>`; }
+
+  function selectOptions(type,value) {
+    const choices={
+      status:['DRAFT','TO VERIFY','VERIFIED','SUPERSEDED'], priority:['LOW','MEDIUM','HIGH','CRITICAL'], risk:['LOW','MEDIUM','HIGH'],
+      taskstatus:['NOT STARTED','IN PROGRESS','BLOCKED','OPEN','COMPLETE','CLOSED'], disposition:['RETAIN','REPAIR','REPLACE','MISSING','SURPLUS']
+    }[type] || [];
+    return choices.map(o=>`<option value="${o}" ${value===o?'selected':''}>${o}</option>`).join('');
+  }
+
+  function table(name,title,emptyText='No records yet') {
+    const p=activeProject(); const schema=tableSchemas[name]; const rows=p.tables[name]||[];
+    const headers=schema.columns.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th aria-label="Row actions"></th>';
+    const body=rows.map(r=>`<tr data-row="${r._id}">${schema.columns.map(([key,label,type])=>{
+      const value=r[key]??'';
+      if (['status','priority','risk','taskstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
+      return `<td><input aria-label="${esc(label)}" data-table="${name}" data-key="${key}" type="${type}" value="${esc(value)}" placeholder="Enter…" ${type==='number'?'step="0.01"':''}></td>`;
+    }).join('')}<td><button class="row-delete" data-delete-row="${name}" aria-label="Delete row" title="Delete row">×</button></td></tr>`).join('');
+    return `<div class="table-wrap"><table class="data-table"><thead><tr>${headers}</tr></thead><tbody>${body || `<tr><td colspan="${schema.columns.length+1}"><div class="empty-state"><h3>${esc(emptyText)}</h3><p>Add the first record when it is needed.</p></div></td></tr>`}</tbody></table></div><div class="table-actions"><button class="button ghost small" data-add-row="${name}">＋ Add row</button></div>`;
+  }
+
+  function checklist(name) {
+    const list=activeProject().checklists[name]||[];
+    return `<div class="check-list">${list.map((item,i)=>`<div class="check-item"><input id="${name}-${i}" type="checkbox" data-checklist="${name}" data-index="${i}" ${item.done?'checked':''}><label for="${name}-${i}">${esc(item.label)}</label><small>${item.done?'DONE':'OPEN'}</small></div>`).join('')}</div>`;
+  }
+
+  function photoGallery(galleryKey) {
+    const p=activeProject();
+    const photos=p.photoGalleries?.[galleryKey]||[];
+    const suggestions=galleryDefinitions[galleryKey]||[];
+    const cards=photos.map((photo,index)=>`<figure class="gallery-photo" data-gallery-photo="${photo.id}">
+      <div class="gallery-photo-image"><img src="${photo.dataUrl}" alt="${esc(photo.caption||photo.name||`Project photo ${index+1}`)}"></div>
+      <figcaption><input type="text" data-gallery-caption="${galleryKey}" data-photo-id="${photo.id}" value="${esc(photo.caption||'')}" placeholder="Add a caption…" aria-label="Photo caption"></figcaption>
+      <div class="gallery-photo-actions">
+        <label for="replace-${photo.id}">Replace</label><input hidden id="replace-${photo.id}" type="file" accept="image/png,image/jpeg,image/webp" data-gallery-replace="${galleryKey}" data-photo-id="${photo.id}">
+        <button type="button" data-gallery-remove="${galleryKey}" data-photo-id="${photo.id}">Remove</button>
+      </div>
+    </figure>`).join('');
+    return `<div class="photo-gallery" data-gallery="${galleryKey}">
+      <div class="photo-gallery-toolbar">
+        <div><strong>${photos.length} ${photos.length===1?'PHOTO':'PHOTOS'}</strong><span>Add images one at a time or select a batch.</span></div>
+        <label class="button primary small" for="add-gallery-${galleryKey}">＋ Add photo</label>
+        <input hidden id="add-gallery-${galleryKey}" type="file" accept="image/png,image/jpeg,image/webp" multiple data-gallery-add="${galleryKey}">
+      </div>
+      <div class="photo-gallery-suggestions"><b>Suggested coverage:</b> ${suggestions.map(esc).join(' · ')}</div>
+      ${photos.length?`<div class="photo-gallery-grid">${cards}</div>`:`<div class="photo-gallery-empty"><span>＋</span><strong>No photos added yet</strong><p>Use Add Photo to choose PNG, JPG or WebP files. There is no fixed photo count.</p></div>`}
+    </div>`;
+  }
+
+  function totals(p=activeProject()) {
+    const b=p.tables.budget||[];
+    return ['budget','committed','paid','forecast'].reduce((acc,key)=>{acc[key]=b.reduce((s,r)=>s+(Number(r[key])||0),0);return acc;},{});
+  }
+
+  function completion(p=activeProject()) {
+    const checks=Object.values(p.checklists||{}).flat();
+    const rows=['actions','body','chassis','powertrain','circuits','trim','compliance','tests'].flatMap(k=>p.tables[k]||[]).filter(r=>r.status);
+    const complete=checks.filter(x=>x.done).length + rows.filter(r=>['COMPLETE','CLOSED','VERIFIED'].includes(r.status)).length;
+    const total=checks.length+rows.length;
+    return total?Math.round(complete/total*100):0;
+  }
+
+  function dashboard() {
+    const p=activeProject(); const t=totals(p); const progress=completion(p);
+    const openIssues=(p.tables.issues||[]).filter(x=>!['CLOSED','COMPLETE'].includes(x.status)).length;
+    const nextActions=(p.tables.actions||[]).filter(x=>x.status!=='COMPLETE').slice(0,5);
+    const evidence=(p.tables.evidence||[]); const verified=evidence.filter(x=>x.status==='VERIFIED').length;
+    return header('00','Command centre','The live project picture: progress, money, evidence, risk and next work.')+
+      `<div class="dashboard-grid">
+        <section class="card span-3 metric plum"><span class="metric-label">ACTIVE PROJECT</span><strong>${esc(p.meta.name)}</strong><span class="metric-note">${esc(p.meta.vehicle||'Vehicle details to enter')}</span></section>
+        <section class="card span-3 metric cyan"><span class="metric-label">BUILD COMPLETION</span><strong>${progress}<small>%</small></strong><span class="metric-note">Checklist and work-package completion</span></section>
+        <section class="card span-3 metric copper"><span class="metric-label">FORECAST COST</span><strong>${money(t.forecast||t.committed)}</strong><span class="metric-note">Paid ${money(t.paid)} · committed ${money(t.committed)}</span></section>
+        <section class="card span-3 metric ${openIssues?'copper':'green'}"><span class="metric-label">OPEN ISSUES</span><strong>${openIssues}</strong><span class="metric-note">${openIssues?'Review blockers and unresolved changes':'No open issues recorded'}</span></section>
+        ${card('Build phase',`<div class="phase-track">${phaseNames.map((name,i)=>`<button class="phase ${i<p.meta.phase?'done':i===Number(p.meta.phase)?'active':''}" data-phase="${i}"><span>0${i+1}</span><strong>${name}</strong></button>`).join('')}</div>`,{span:'span-12',meta:'SELECT CURRENT PHASE'})}
+        ${card('Project health',`<div class="progress-row"><div class="progress-ring" style="--progress:${progress}"><strong>${progress}%</strong></div><div class="progress-detail"><h3>${badge(p.meta.status)} &nbsp; ${badge(p.fields.identityStatus||'DRAFT')}</h3><p><b>Next milestone:</b> ${esc(p.fields.nextMilestone||'Not set')}<br><b>Next review:</b> ${esc(p.fields.nextReview||'Not set')}<br><b>Evidence verified:</b> ${verified} of ${evidence.length}</p></div></div>`,{span:'span-5'})}
+        ${card('Next actions',nextActions.length?`<div class="check-list">${nextActions.map(a=>`<div class="check-item"><span>${badge(a.priority)}</span><label><strong>${esc(a.action||'Untitled action')}</strong><br><small>${esc(a.owner||'Unassigned')} · ${esc(a.due||'No due date')}</small></label>${badge(a.status)}</div>`).join('')}</div>`:`<div class="empty-state"><h3>No open actions</h3><p>Add a next action to move the build forward.</p></div>`,{span:'span-7',meta:`${nextActions.length} SHOWN`})}
+        ${card('Project control',`<div class="form-grid">${field('Project name','name',{path:'meta'})}${field('Vehicle description','vehicle',{path:'meta'})}${field('Project code','code',{path:'meta'})}${field('Binder version','version',{path:'meta'})}${field('Project owner','owner',{path:'meta'})}${field('Project status','status',{path:'meta',options:fieldTypes.projectStatus})}${field('Master file location','binderLocation')}${field('Photo / media location','mediaLocation')}${field('Next milestone','nextMilestone',{span:'span-2'})}${field('Next review','nextReview',{type:'date'})}</div>`,{span:'span-12'})}
+      </div>`;
+  }
+
+  function identity() {
+    return header('01','Identity & history','Separate observed facts from claims, then preserve the source.')+
+    `<div class="section-grid">
+      ${card('Vehicle identity',`<div class="form-grid three">${field('Manufacturer','manufacturer')}${field('Model','model')}${field('Series','series')}${field('Body style','bodyStyle')}${field('Build date','buildDate')}${field('VIN / chassis number','vin')}${field('Registration','registration')}${field('Engine number','engineNumber')}${field('Transmission identifier','transmissionId')}${field('Paint code / original colour','paintCode')}${field('Trim code / original trim','trimCode')}${field('Odometer','odometer')}${field('Identity confidence','identityStatus',{type:'status'})}${field('History summary','historySummary',{type:'textarea',span:'span-2'})}</div><div class="callout warning" style="margin-top:14px"><strong>Evidence standard</strong>Photograph identifiers in place, transcribe exactly and record their locations. If an identifier is unreadable, record that fact rather than guessing.</div>`,{span:'span-12'})}
+      ${card('Identity photographs',photoGallery('identity'),{span:'span-12'})}
+      ${card('Provenance timeline',table('history'),{span:'span-12'})}
+      ${card('Evidence register',table('evidence'),{span:'span-12'})}
+    </div>`;
+  }
+
+  function baseline() {
+    return header('02','Baseline condition','Capture the starting point before dismantling, cleaning or replacing evidence.')+
+    `<div class="section-grid">${card('Condition summary',table('condition'),{span:'span-12'})}${card('Immediate preservation & safety',checklist('baseline'),{span:'half'})}${card('Baseline photo survey',photoGallery('baseline'),{span:'half'})}<div class="callout warning" style="grid-column:span 12"><strong>Stop-work trigger</strong>If identity, structural safety, hazardous materials or legal ownership is uncertain, pause irreversible work and obtain appropriate specialist advice.</div></div>`;
+  }
+
+  function vision() {
+    return header('03','Vision & scope','Turn the dream into explicit choices that can be costed, built and verified.')+
+    `<div class="section-grid">${card('Build brief',`<div class="form-grid">${field('Intended use','intendedUse')}${field('Restoration approach','approach',{options:fieldTypes.approach})}${field('Finish standard','finishStandard',{options:fieldTypes.finish})}${field('Authenticity priority','authenticity')}${field('Performance goal','performanceGoal')}${field('Reliability / serviceability goal','reliabilityGoal')}${field('Comfort / usability goal','comfortGoal')}${field('Non-negotiables','nonNegotiables',{type:'textarea'})}${field('Success statement','success',{type:'textarea',span:'span-2'})}</div>`,{span:'span-12'})}${card('Scope boundaries',`<div class="form-grid three">${field('In scope now','inScope',{type:'textarea'})}${field('Deferred / future','deferred',{type:'textarea'})}${field('Explicitly out of scope','outScope',{type:'textarea'})}</div>`,{span:'span-12'})}<div class="callout plum" style="grid-column:span 12"><strong>Wild Plum XA showcase</strong>The example brief aims for a documented, period-respectful and road-usable XA Coupe. “Wild Plum” is a project identity; factory colour, codes and options remain TO VERIFY until evidence is recorded.</div></div>`;
+  }
+
+  function planning() {
+    return header('04','Planning & decisions','Sequence work around evidence, dependencies, risk and irreversible choices.')+
+    `<div class="section-grid">${card('Next actions',table('actions'),{span:'span-12'})}${card('Decision register',table('decisions'),{span:'span-12'})}${card('Risk register',table('risks'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Approval gate</strong>Record a decision before changing identity, cutting structure, deleting original features, ordering high-value custom parts or applying final finish.</div></div>`;
+  }
+
+  function disassembly() {
+    return header('05','Disassembly & parts','Make every removed item findable, identifiable and re-installable.')+
+    `<div class="section-grid">${card('Tagging convention',`<div class="form-grid">${field('Project prefix','tagPrefix')}${field('Area codes','areaCodes')}${field('Container label format','containerFormat')}${field('Tag example','tagExample',{placeholder:'e.g. WPXA-BDY-001'})}</div>`,{span:'half'})}${card('Removal discipline',checklist('disassembly'),{span:'half'})}${card('Parts inventory & storage map',table('inventory','Parts inventory','No parts have been catalogued yet'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Loss prevention</strong>Do not use “miscellaneous” as a permanent category. Every loose fastener, bracket, clip and shim should inherit the assembly tag.</div></div>`;
+  }
+
+  function body() {
+    return header('06','Body, shell & paint','Document structure first; decide finish after fit and repair strategy are understood.')+
+    `<div class="section-grid">${card('Body & structural assessment',table('body'),{span:'span-12'})}${card('Paint & finish direction',`<div class="form-grid">${field('Colour / finish direction','colourDirection')}${field('Code / formula','paintCode')}${field('Paint system / brand','paintSystem')}${field('Gloss / texture target','glossTarget')}${field('Underbody / cavity protection','protection')}${field('Decision status','bodyPaintStatus',{options:fieldTypes.status})}</div>`,{span:'half'})}${card('Finish evidence',photoGallery('body'),{span:'half'})}<div class="callout warning" style="grid-column:span 12"><strong>Hold point</strong>Complete structural inspection, trial assembly and panel-gap approval before final paint preparation.</div></div>`;
+  }
+
+  function chassis() {
+    return header('07','Chassis, brakes & wheels','Control safety-critical components with measurements, sources and verification.')+
+    `<div class="section-grid">${card('System build record',table('chassis'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Safety record</strong>Torque values and procedures must come from an identified authoritative source or qualified specialist. Record the source in the reference library.</div></div>`;
+  }
+
+  function powertrain() {
+    return header('08','Powertrain & support','Connect specification, machine work, parts, clearances, setup and test results.')+
+    `<div class="section-grid">${card('Major assembly identity',`<div class="form-grid three">${field('Engine / assembly ID','engineId')}${field('Transmission ID','transmissionBuildId')}${field('Differential / axle ID','axleId')}${field('Builder / specialist','builder')}${field('Target use / output','targetOutput')}${field('Build sheet location','buildSheet')}</div>`,{span:'span-12'})}${card('Powertrain & supporting systems',table('powertrain'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Source discipline</strong>Do not copy critical clearances, capacities or torque values without naming the manual, data sheet or specialist that supplied them.</div></div>`;
+  }
+
+  function electrical() {
+    return header('09','Electrical & controls','Create a serviceable system whose routes, loads, protection and changes are documented.')+
+    `<div class="section-grid">${card('Electrical architecture',`<div class="form-grid three">${field('System voltage','voltage')}${field('Battery location / type','battery')}${field('Main protection','mainProtection')}${field('Earth strategy','earthStrategy')}${field('Harness approach','harness')}${field('Diagram location','diagram')}</div>`,{span:'span-12'})}${card('Circuit register',table('circuits'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Change control</strong>Every non-original circuit should have a purpose, protection rating, route, wire identification, earth point and updated diagram.</div></div>`;
+  }
+
+  function interior() {
+    return header('10','Interior, trim & glass','Record appearance, materials, fit, provenance and water-management details.')+
+    `<div class="section-grid">${card('Interior / trim build record',table('trim'),{span:'span-12'})}${card('Reference photographs',photoGallery('interior'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Assembly sequence</strong>Trial-fit trim, glass, mechanisms and seals early enough to resolve holes, clips, clearances and water paths before final finishes become vulnerable.</div></div>`;
+  }
+
+  function commercial() {
+    const t=totals();
+    return header('11','Procurement & budget','Connect every purchase to scope, provenance, fit and financial control.')+
+    `<div class="dashboard-grid">
+      <section class="card span-3 metric"><span class="metric-label">APPROVED BUDGET</span><strong>${money(t.budget)}</strong><span class="metric-note">Current category total</span></section>
+      <section class="card span-3 metric copper"><span class="metric-label">COMMITTED</span><strong>${money(t.committed)}</strong><span class="metric-note">Orders and approved work</span></section>
+      <section class="card span-3 metric"><span class="metric-label">PAID</span><strong>${money(t.paid)}</strong><span class="metric-note">Recorded actual spend</span></section>
+      <section class="card span-3 metric cyan"><span class="metric-label">FORECAST</span><strong>${money(t.forecast)}</strong><span class="metric-note">Expected total at completion</span></section>
+      ${card('Budget summary',table('budget'),{span:'span-12'})}
+      ${card('Procurement register',table('procurement','Procurement','No purchases recorded yet'),{span:'span-12'})}
+      ${card('Part acceptance checklist',checklist('acceptance'),{span:'span-12'})}
+    </div>`;
+  }
+
+  function worklog() {
+    return header('12','Work, issues & media','Create a chronological record that explains what changed, why and how it was verified.')+
+    `<div class="section-grid">${card('Work log',table('worklog','Work log','No work entries recorded yet'),{span:'span-12'})}${card('Issue / defect / change log',table('issues','Issues','No issues recorded'),{span:'span-12'})}${card('Milestone photographs',photoGallery('milestones'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Close-out standard</strong>An issue is closed only when the completed action and verification evidence are recorded—not merely when work starts.</div></div>`;
+  }
+
+  function handover() {
+    return header('13','Compliance & handover','Prove the finished vehicle is safe, legal for its intended use and understandable to its next custodian.')+
+    `<div class="section-grid">${card('Compliance & inspection register',table('compliance'),{span:'span-12'})}${card('Pre-start hold point',checklist('prestart'),{span:'half'})}${card('Handover pack',checklist('handover'),{span:'half'})}${card('Commissioning & road-test plan',table('tests'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Jurisdiction note</strong>Requirements vary by vehicle, modifications, intended use and location. Record advice from the relevant authority or qualified specialist.</div></div>`;
+  }
+
+  function library() {
+    return header('14','Reference library','Make every technical claim, purchase and approval traceable to its source.')+
+    `<div class="section-grid">${card('Reference register',table('references','References','No reference documents indexed yet'),{span:'span-12'})}${card('Suggested folder map',`<div class="timeline"><div class="timeline-entry"><time>01 · IDENTITY & HISTORY</time><h3>Plates, registration, ownership and research</h3><p>EV-001_IdentityPlate_YYYYMMDD.jpg</p></div><div class="timeline-entry"><time>02 · TECHNICAL</time><h3>Manuals, diagrams and build sheets</h3><p>REF-001_WorkshopManual_[version].pdf</p></div><div class="timeline-entry"><time>03 · COMMERCIAL</time><h3>Quotes, orders, receipts and warranties</h3><p>P-001_Supplier_Receipt.pdf</p></div><div class="timeline-entry"><time>04 · COMPLIANCE</time><h3>Reports, certificates and approvals</h3><p>REF-005_Approval_[date].pdf</p></div><div class="timeline-entry"><time>05 · MEDIA</time><h3>Original photos and video</h3><p>YYYYMMDD_Area_Sequence.jpg</p></div></div>`,{span:'half'})}${card('Library rules',`<div class="callout"><strong>Link resilience</strong>Prefer stable cloud links and consistent filenames. If files move, update the register as part of the same change.</div><div class="callout warning" style="margin-top:12px"><strong>Authority</strong>Mark the document version, publication date or specialist. A source without identity is difficult to verify later.</div>`,{span:'half'})}</div>`;
+  }
+
+  function design() {
+    const p=activeProject();
+    return header('DL','Binder design lab','Refine the screen experience and content before a dedicated printable edition is designed.')+
+    `<div class="section-grid">${card('Screen density',`<div class="design-options"><button class="option-tile ${p.preferences.density==='standard'?'selected':''}" data-preference="density" data-value="standard"><strong>Workshop standard</strong><small>Balanced spacing for laptop and desktop use.</small><div class="option-swatch"></div></button><button class="option-tile ${p.preferences.density==='compact'?'selected':''}" data-preference="density" data-value="compact"><strong>Compact control</strong><small>More records on screen with tighter vertical rhythm.</small><div class="option-swatch"></div></button></div>`,{span:'half'})}${card('Accessibility & contrast',`<div class="design-options"><button class="option-tile ${p.preferences.contrast==='standard'?'selected':''}" data-preference="contrast" data-value="standard"><strong>Blueprint</strong><small>Original technical-drawing palette.</small><div class="option-swatch"></div></button><button class="option-tile ${p.preferences.contrast==='high'?'selected':''}" data-preference="contrast" data-value="high"><strong>High contrast</strong><small>Brighter lines and secondary text.</small><div class="option-swatch"></div></button></div>`,{span:'half'})}${card('Refinement notes',`<div class="form-grid">${field('What feels useful?','designUseful',{type:'textarea'})}${field('What feels unnecessary?','designRemove',{type:'textarea'})}${field('What is missing?','designMissing',{type:'textarea'})}${field('What needs more detail?','designDetail',{type:'textarea'})}${field('Overall notes for next version','designNotes',{type:'textarea',span:'span-2'})}</div>`,{span:'span-12'})}${card('Change requests',table('refinements','Change requests','No design changes requested yet'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Version principle</strong>Refine the digital structure and content first. Page efficiency, print margins, duplex behaviour and low-ink styling belong to the later printable edition.</div></div>`;
+  }
+
+  const renderers={dashboard,identity,baseline,vision,planning,disassembly,body,chassis,powertrain,electrical,interior,commercial,worklog,handover,library,design};
+
+  function autoGrowTextarea(textarea) {
+    if(!textarea || textarea.tagName!=='TEXTAREA') return;
+    textarea.style.height='auto';
+    textarea.style.height=`${Math.max(textarea.scrollHeight,72)}px`;
+  }
+
+  function initialiseAutoGrow(root=document) {
+    root.querySelectorAll('textarea').forEach(autoGrowTextarea);
+  }
+
+  function render() {
+    updateProjectChrome(); renderNav();
+    app.innerHTML=(renderers[activeSection]||dashboard)();
+    window.scrollTo({top:0,behavior:'instant'});
+    $('#workspace').focus({preventScroll:true});
+    requestAnimationFrame(()=>initialiseAutoGrow(app));
+  }
+
+  function openModal(kicker,title,content,footer='') {
+    $('#modalKicker').textContent=kicker; $('#modalTitle').textContent=title; $('#modalContent').innerHTML=content; $('#modalFooter').innerHTML=footer;
+    $('#modalBackdrop').hidden=false; document.body.style.overflow='hidden';
+    setTimeout(()=>$('#modalContent').querySelector('input,select,textarea,button')?.focus(),20);
+  }
+  function closeModal() { $('#modalBackdrop').hidden=true; document.body.style.overflow=''; }
+
+  function newProjectModal() {
+    openModal('NEW RESTORATION','Create a clean project',`<div class="form-grid"><div class="field"><label>Project name</label><input id="newProjectName" placeholder="e.g. Dad’s FJ Holden"></div><div class="field"><label>Vehicle description</label><input id="newProjectVehicle" placeholder="Year / make / model / body"></div><div class="field"><label>Project code</label><input id="newProjectCode" placeholder="e.g. FJH-001"></div><div class="field"><label>Start from</label><select id="newProjectSource"><option value="blank">Clean reusable template</option><option value="clone">Clone current project structure and data</option></select></div></div><div class="callout" style="margin-top:14px"><strong>Reusable by design</strong>A clean project contains the same binder structure without Wild Plum XA specifications or claims.</div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="createProjectConfirm">Create project</button>`);
+  }
+
+  function dataModal() {
+    const p=activeProject();
+    openModal('DATA & BACKUP','Own the project record',`<div class="section-grid"><div class="card half"><div class="card-body"><h3>Export backup</h3><p style="color:var(--muted)">Download all projects, fields, registers and preferences as JSON. Embedded photos may make the file large.</p><button class="button primary" data-export="all">Export all projects</button></div></div><div class="card half"><div class="card-body"><h3>Import backup</h3><p style="color:var(--muted)">Import a Build Binder JSON backup. Existing projects are preserved unless the imported IDs match.</p><label class="button ghost" for="importFile">Choose JSON file</label><input hidden id="importFile" type="file" accept="application/json"></div></div><div class="card span-12"><div class="card-body"><h3>Current project</h3><p><b>${esc(p.meta.name)}</b> · updated ${esc(p.meta.updated)} · ${(new Blob([JSON.stringify(p)]).size/1024).toFixed(1)} KB of local data</p><button class="button ghost" data-export="project">Export current project</button> ${p.meta.showcase?'':'<button class="button danger" id="deleteProjectButton">Delete current project</button>'}</div></div></div>`,`<button class="button ghost" data-modal-close>Close</button>`);
+  }
+
+  function commandModal() {
+    openModal('COMMAND PALETTE','Jump to a binder section',`<div class="field"><label>Search sections</label><input id="commandSearch" placeholder="Type a section name…" autocomplete="off"></div><div class="command-list" id="commandList">${sectionDefs.map(s=>`<button class="command-item" data-command-section="${s.id}"><span class="command-index">${s.index}</span><span><strong>${s.label}</strong><small>${s.group}</small></span><kbd>↵</kbd></button>`).join('')}</div>`,`<button class="button ghost" data-modal-close>Close</button>`);
+  }
+
+  function quickAddModal() {
+    openModal('QUICK CAPTURE','Add a project record',`<div class="form-grid"><div class="field"><label>Record type</label><select id="quickType"><option value="actions">Action</option><option value="issues">Issue / defect</option><option value="inventory">Part / inventory item</option><option value="worklog">Work log entry</option><option value="evidence">Evidence item</option><option value="procurement">Purchase / service</option></select></div><div class="field"><label>Short description</label><input id="quickDescription" placeholder="What needs to be recorded?"></div><div class="field"><label>Owner / by</label><input id="quickOwner" placeholder="Optional"></div><div class="field"><label>Date / due</label><input id="quickDate" type="date" value="${today()}"></div></div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="quickAddConfirm">Add record</button>`);
+  }
+
+  function quickAdd() {
+    const type=$('#quickType').value, desc=$('#quickDescription').value.trim(), owner=$('#quickOwner').value.trim(), date=$('#quickDate').value;
+    if(!desc) return toast('Description required','Enter a short description first.');
+    const p=activeProject(); let data;
+    if(type==='actions') data={...tableSchemas.actions.blank,action:desc,owner,due:date};
+    if(type==='issues') data={...tableSchemas.issues.blank,id:`ISS-${String((p.tables.issues?.length||0)+1).padStart(3,'0')}`,issue:desc,owner};
+    if(type==='inventory') data={...tableSchemas.inventory.blank,tag:`${p.fields.tagPrefix||'PART'}-${String((p.tables.inventory?.length||0)+1).padStart(3,'0')}`,part:desc};
+    if(type==='worklog') data={...tableSchemas.worklog.blank,date,work:desc,by:owner};
+    if(type==='evidence') data={...tableSchemas.evidence.blank,id:`EV-${String((p.tables.evidence?.length||0)+1).padStart(3,'0')}`,item:desc,source:owner};
+    if(type==='procurement') data={...tableSchemas.procurement.blank,id:`P-${String((p.tables.procurement?.length||0)+1).padStart(3,'0')}`,item:desc,supplier:owner,ordered:date};
+    p.tables[type]=p.tables[type]||[]; p.tables[type].push(row(data)); queueSave('Quick record added'); closeModal(); render();
+  }
+
+  function exportJson(scope) {
+    const payload=scope==='project'?{format:'the-build-binder-project',version:APP_VERSION,exported:new Date().toISOString(),project:activeProject()}:{format:'the-build-binder-backup',version:APP_VERSION,exported:new Date().toISOString(),state};
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download=`${slug(activeProject().meta.name||'build-binder')}-${scope==='project'?'project':'backup'}-${today()}.json`; a.click(); URL.revokeObjectURL(url); toast('Backup created',a.download);
+  }
+
+  async function importJson(file) {
+    try {
+      const data=JSON.parse(await file.text());
+      if(data.format==='the-build-binder-backup' && data.state?.projects) { state=data.state; state.projects.forEach(ensureProjectShape); }
+      else if(data.format==='the-build-binder-project' && data.project) {
+        ensureProjectShape(data.project);
+        const i=state.projects.findIndex(p=>p.id===data.project.id); if(i>=0) state.projects[i]=data.project; else state.projects.push(data.project); state.activeProjectId=data.project.id;
+      } else throw new Error('Not a Build Binder backup');
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); closeModal(); render(); toast('Import complete','The binder data has been restored.');
+    } catch(err) { toast('Import failed',err.message); }
+  }
+
+  async function compressPhoto(file) {
+    const allowed=['image/png','image/jpeg','image/webp'];
+    if(!allowed.includes(file.type)) throw new Error(`${file.name}: choose a PNG, JPG or WebP image.`);
+    if(file.size>15*1024*1024) throw new Error(`${file.name}: the image is larger than 15 MB.`);
+    const bitmap=await createImageBitmap(file); const max=1400; const scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
+    const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round(bitmap.width*scale)); canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+    const ctx=canvas.getContext('2d'); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high'; ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+    return { id:uid('photo'), dataUrl:canvas.toDataURL('image/webp',.76), name:file.name, caption:'', type:file.type, width:canvas.width, height:canvas.height, added:new Date().toISOString() };
+  }
+
+  async function prepareProjectImage(file) {
+    const allowed=['image/png','image/jpeg','image/webp'];
+    if(!allowed.includes(file.type)) throw new Error('Choose a PNG, JPG or WebP image.');
+    if(file.size>10*1024*1024) throw new Error('The image must be smaller than 10 MB.');
+    const bitmap=await createImageBitmap(file);
+    const maxWidth=1600, maxHeight=900;
+    const scale=Math.min(1,maxWidth/bitmap.width,maxHeight/bitmap.height);
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+    canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+    const ctx=canvas.getContext('2d');
+    ctx.imageSmoothingEnabled=true;
+    ctx.imageSmoothingQuality='high';
+    ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+    const dataUrl=canvas.toDataURL('image/webp',.88);
+    return { dataUrl, name:file.name, type:file.type, width:canvas.width, height:canvas.height, updated:new Date().toISOString() };
+  }
+
+  document.addEventListener('click', async e=>{
+    const section=e.target.closest('[data-section]'); if(section){ activeSection=section.dataset.section; location.hash=activeSection; $('#sidebar').classList.remove('open'); render(); }
+    if(e.target.closest('[data-action="quick-add"]')||e.target.closest('#quickAddButton')) quickAddModal();
+    if(e.target.closest('[data-action="print"]')||e.target.closest('#printButton')) window.print();
+    if(e.target.closest('#newProjectButton')) newProjectModal();
+    if(e.target.closest('#dataButton')) dataModal();
+    if(e.target.closest('#commandButton')) commandModal();
+    if(e.target.closest('#menuToggle')) $('#sidebar').classList.toggle('open');
+    if(e.target.closest('#modalClose')||e.target.closest('[data-modal-close]')||e.target=== $('#modalBackdrop')) closeModal();
+    const add=e.target.closest('[data-add-row]'); if(add){ const name=add.dataset.addRow; activeProject().tables[name].push(row(clone(tableSchemas[name].blank))); queueSave('Row added'); render(); }
+    const del=e.target.closest('[data-delete-row]'); if(del){ const tr=del.closest('tr'); const name=del.dataset.deleteRow; activeProject().tables[name]=activeProject().tables[name].filter(r=>r._id!==tr.dataset.row); queueSave('Row deleted'); render(); }
+    const phase=e.target.closest('[data-phase]'); if(phase){ activeProject().meta.phase=Number(phase.dataset.phase); queueSave('Build phase updated'); render(); }
+    const pref=e.target.closest('[data-preference]'); if(pref){ activeProject().preferences[pref.dataset.preference]=pref.dataset.value; queueSave('Display preference updated'); render(); }
+    const galleryRemove=e.target.closest('[data-gallery-remove]');
+    if(galleryRemove){
+      const gallery=galleryRemove.dataset.galleryRemove;
+      activeProject().photoGalleries[gallery]=activeProject().photoGalleries[gallery].filter(photo=>photo.id!==galleryRemove.dataset.photoId);
+      queueSave('Photo removed'); render();
+    }
+    if(e.target.closest('#projectImageRemove')){
+      activeProject().projectImage=null;
+      $('#projectImageInput').value='';
+      queueSave('Project image removed');
+      updateProjectChrome();
+    }
+    const cmd=e.target.closest('[data-command-section]'); if(cmd){ activeSection=cmd.dataset.commandSection; location.hash=activeSection; closeModal(); render(); }
+    if(e.target.closest('#createProjectConfirm')){
+      const name=$('#newProjectName').value.trim()||'Untitled restoration'; const vehicle=$('#newProjectVehicle').value.trim()||'Vehicle details to enter';
+      let p=$('#newProjectSource').value==='clone'?clone(activeProject()):genericProject(name,vehicle); p.id=uid('project'); p.meta.name=name; p.meta.vehicle=vehicle; p.meta.code=$('#newProjectCode').value.trim()||'NEW-001'; p.meta.showcase=false; p.meta.updated=today();
+      state.projects.push(p); state.activeProjectId=p.id; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); closeModal(); activeSection='dashboard'; location.hash='dashboard'; render(); toast('Project created',`${name} is ready.`);
+    }
+    if(e.target.closest('#quickAddConfirm')) quickAdd();
+    const exp=e.target.closest('[data-export]'); if(exp) exportJson(exp.dataset.export);
+    if(e.target.closest('#deleteProjectButton')){
+      const p=activeProject(); if(confirm(`Delete ${p.meta.name}? Export a backup first if it must be retained.`)){ state.projects=state.projects.filter(x=>x.id!==p.id); state.activeProjectId=state.projects[0].id; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); closeModal(); render(); toast('Project deleted','The local project was removed.'); }
+    }
+  });
+
+  document.addEventListener('input', e=>{
+    if(e.target.matches('textarea')) autoGrowTextarea(e.target);
+    if(e.target.matches('[data-field]')){
+      const p=activeProject(); const source=e.target.dataset.path==='meta'?p.meta:p.fields; source[e.target.dataset.field]=e.target.value; queueSave('Field updated');
+    }
+    if(e.target.matches('[data-table]')){
+      const rowEl=e.target.closest('tr'); const table=e.target.dataset.table; const r=activeProject().tables[table].find(x=>x._id===rowEl.dataset.row); if(r){r[e.target.dataset.key]=e.target.value;queueSave('Register updated');}
+    }
+    if(e.target.matches('[data-gallery-caption]')){
+      const gallery=e.target.dataset.galleryCaption;
+      const photo=activeProject().photoGalleries[gallery]?.find(item=>item.id===e.target.dataset.photoId);
+      if(photo){ photo.caption=e.target.value; queueSave('Photo caption updated'); }
+    }
+    if(e.target.id==='commandSearch'){
+      const q=e.target.value.toLowerCase(); document.querySelectorAll('[data-command-section]').forEach(x=>x.hidden=!x.textContent.toLowerCase().includes(q));
+    }
+  });
+
+  document.addEventListener('change', async e=>{
+    if(e.target.matches('[data-checklist]')){ const x=activeProject().checklists[e.target.dataset.checklist][Number(e.target.dataset.index)]; x.done=e.target.checked; queueSave('Checklist updated'); render(); }
+    if(e.target===projectSelect){ state.activeProjectId=e.target.value; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); render(); toast('Project switched',activeProject().meta.name); }
+    if(e.target.id==='importFile' && e.target.files[0]) importJson(e.target.files[0]);
+    if(e.target.matches('[data-gallery-add]') && e.target.files.length){
+      const gallery=e.target.dataset.galleryAdd;
+      const files=[...e.target.files];
+      let saved=0;
+      for(const file of files){
+        try {
+          const photo=await compressPhoto(file);
+          activeProject().photoGalleries[gallery].push(photo);
+          if(!persistStateNow('',false)) { activeProject().photoGalleries[gallery].pop(); break; }
+          saved++;
+        } catch(err) { toast('Photo could not be saved',err.message); }
+      }
+      e.target.value='';
+      render();
+      if(saved) toast('Photos added',`${saved} ${saved===1?'photo was':'photos were'} saved locally to this section.`);
+    }
+    if(e.target.matches('[data-gallery-replace]') && e.target.files[0]){
+      const gallery=e.target.dataset.galleryReplace;
+      const index=activeProject().photoGalleries[gallery].findIndex(photo=>photo.id===e.target.dataset.photoId);
+      if(index>=0){
+        const original=activeProject().photoGalleries[gallery][index];
+        try {
+          const replacement=await compressPhoto(e.target.files[0]);
+          replacement.id=original.id;
+          replacement.caption=original.caption;
+          activeProject().photoGalleries[gallery][index]=replacement;
+          if(!persistStateNow('',false)) activeProject().photoGalleries[gallery][index]=original;
+          else toast('Photo replaced','The replacement was saved locally.');
+          render();
+        } catch(err) { toast('Photo could not be replaced',err.message); }
+      }
+    }
+    if(e.target.id==='projectImageInput' && e.target.files[0]){
+      const original=activeProject().projectImage;
+      try {
+        activeProject().projectImage=await prepareProjectImage(e.target.files[0]);
+        if(!persistStateNow('',false)) activeProject().projectImage=original;
+        else toast('Project image updated','The image is stored locally with this project.');
+        updateProjectChrome();
+      } catch(err) {
+        e.target.value='';
+        toast('Image could not be added',err.message);
+      }
+    }
+  });
+
+  document.addEventListener('keydown',e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();commandModal();}
+    if(e.key==='Escape'&&!$('#modalBackdrop').hidden) closeModal();
+  });
+
+  window.addEventListener('hashchange',()=>{ const id=location.hash.replace('#',''); if(sectionDefs.some(s=>s.id===id)){activeSection=id;render();} });
+  $('#modalClose').addEventListener('click',closeModal);
+
+  if (!localStorage.getItem(STORAGE_KEY)) localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  updateProjectChrome(); render();
+  if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+
+}
