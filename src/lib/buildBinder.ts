@@ -133,7 +133,13 @@ export function initBuildBinder(): void {
   tableSchemas.chassis = tableSchemas.systems;
   tableSchemas.powertrain = tableSchemas.systems;
 
-  const phaseNames = ['Discover','Strip & catalogue','Body & structure','Systems rebuild','Finish & assembly','Test & handover'];
+  const phaseNames = ['Discover / plan','Strip / catalog','Body / structure','Systems rebuild','Finish & assembly','Test & complete'];
+  const systemPhases = [
+    ['driveline','Driveline'],
+    ['interior','Interior'],
+    ['paint','Paint'],
+    ['electrical','Electrical']
+  ];
 
   const baselineChecks = [
     'Stabilise the vehicle and confirm safe lifting points.', 'Isolate battery and electrical hazards.',
@@ -461,18 +467,34 @@ export function initBuildBinder(): void {
     return total?Math.round(complete/total*100):0;
   }
 
+  function completedSystemPhases(p=activeProject()) {
+    const completed=p.meta.systemPhases||{};
+    return systemPhases.filter(([id])=>completed[id]===true).length;
+  }
+
   function dashboard() {
     const p=activeProject(); const t=totals(p); const progress=completion(p);
     const openIssues=(p.tables.issues||[]).filter(x=>!['CLOSED','COMPLETE'].includes(x.status)).length;
     const nextActions=(p.tables.actions||[]).filter(x=>x.status!=='COMPLETE').slice(0,5);
     const evidence=(p.tables.evidence||[]); const verified=evidence.filter(x=>x.status==='VERIFIED').length;
+    const systemsComplete=completedSystemPhases(p)===systemPhases.length;
+    const currentPhase=systemsComplete?Number(p.meta.phase):Math.min(Number(p.meta.phase),3);
     return header('00','Command centre','The live project picture: progress, money, evidence, risk and next work.')+
       `<div class="dashboard-grid">
         <section class="card span-3 metric plum"><span class="metric-label">ACTIVE PROJECT</span><strong>${esc(p.meta.name)}</strong><span class="metric-note">${esc(p.meta.vehicle||'Vehicle details to enter')}</span></section>
         <section class="card span-3 metric cyan"><span class="metric-label">BUILD COMPLETION</span><strong>${progress}<small>%</small></strong><span class="metric-note">Checklist and work-package completion</span></section>
         <section class="card span-3 metric copper"><span class="metric-label">FORECAST COST</span><strong>${money(t.forecast||t.committed)}</strong><span class="metric-note">Paid ${money(t.paid)} · committed ${money(t.committed)}</span></section>
         <section class="card span-3 metric ${openIssues?'copper':'green'}"><span class="metric-label">OPEN ISSUES</span><strong>${openIssues}</strong><span class="metric-note">${openIssues?'Review blockers and unresolved changes':'No open issues recorded'}</span></section>
-        ${card('Build phase',`<div class="phase-track">${phaseNames.map((name,i)=>`<button class="phase ${i<p.meta.phase?'done':i===Number(p.meta.phase)?'active':''}" data-phase="${i}"><span>0${i+1}</span><strong>${name}</strong></button>`).join('')}</div>`,{span:'span-12',meta:'SELECT CURRENT PHASE'})}
+        ${card('Build phase',`<div class="phase-track">${phaseNames.map((name,i)=>{
+          const done=(i<3&&i<currentPhase)||(i===3&&systemsComplete)||(i>3&&i<currentPhase);
+          const active=i===currentPhase&&!done;
+          const locked=i>3&&!systemsComplete;
+          return `<button class="phase ${done?'done':''} ${active?'active':''}" data-phase="${i}" ${locked?'disabled':''}><span>0${i+1}${done?'<small>DONE</small>':''}</span><strong>${name}</strong></button>`;
+        }).join('')}</div>
+        <div class="system-phase-track" aria-label="Systems rebuild work areas">${systemPhases.map(([id,name],i)=>{
+          const done=p.meta.systemPhases?.[id]===true;
+          return `<button class="system-phase ${done?'done':''}" data-system-phase="${id}" aria-pressed="${done}"><span>04.${i+1}</span><strong>${name}</strong><small>${done?'DONE':'MARK COMPLETE'}</small></button>`;
+        }).join('')}</div>`,{span:'span-12',meta:`${completedSystemPhases(p)} OF 4 SYSTEMS COMPLETE`})}
         ${card('Project health',`<div class="progress-row"><div class="progress-ring" style="--progress:${progress}"><strong>${progress}%</strong></div><div class="progress-detail"><h3>${badge(p.meta.status)} &nbsp; ${badge(p.fields.identityStatus||'DRAFT')}</h3><p><b>Next milestone:</b> ${esc(p.fields.nextMilestone||'Not set')}<br><b>Next review:</b> ${esc(p.fields.nextReview||'Not set')}<br><b>Evidence verified:</b> ${verified} of ${evidence.length}</p></div></div>`,{span:'span-5'})}
         ${card('Next actions',nextActions.length?`<div class="check-list">${nextActions.map(a=>`<div class="check-item"><span>${badge(a.priority)}</span><label><strong>${esc(a.action||'Untitled action')}</strong><br><small>${esc(a.owner||'Unassigned')} · ${esc(a.due||'No due date')}</small></label>${badge(a.status)}</div>`).join('')}</div>`:`<div class="empty-state"><h3>No open actions</h3><p>Add a next action to move the build forward.</p></div>`,{span:'span-7',meta:`${nextActions.length} SHOWN`})}
         ${card('Project control',`<div class="form-grid">${field('Project name','name',{path:'meta'})}${field('Vehicle description','vehicle',{path:'meta'})}${field('Project code','code',{path:'meta'})}${field('Binder version','version',{path:'meta'})}${field('Project owner','owner',{path:'meta'})}${field('Project status','status',{path:'meta',options:fieldTypes.projectStatus})}${field('Master file location','binderLocation')}${field('Photo / media location','mediaLocation')}${field('Next milestone','nextMilestone',{span:'span-2'})}${field('Next review','nextReview',{type:'date'})}</div>`,{span:'span-12'})}
@@ -703,7 +725,19 @@ export function initBuildBinder(): void {
     }
     const add=e.target.closest('[data-add-row]'); if(add){ const name=add.dataset.addRow; activeProject().tables[name].push(row(clone(tableSchemas[name].blank))); queueSave('Row added'); render(); }
     const del=e.target.closest('[data-delete-row]'); if(del){ const tr=del.closest('tr'); const name=del.dataset.deleteRow; activeProject().tables[name]=activeProject().tables[name].filter(r=>r._id!==tr.dataset.row); queueSave('Row deleted'); render(); }
-    const phase=e.target.closest('[data-phase]'); if(phase){ activeProject().meta.phase=Number(phase.dataset.phase); queueSave('Build phase updated'); render(); }
+    const systemPhase=e.target.closest('[data-system-phase]');
+    if(systemPhase){
+      const p=activeProject();
+      p.meta.systemPhases=p.meta.systemPhases||{};
+      const id=systemPhase.dataset.systemPhase;
+      p.meta.systemPhases[id]=p.meta.systemPhases[id]!==true;
+      if(completedSystemPhases(p)===systemPhases.length&&Number(p.meta.phase)<4) p.meta.phase=4;
+      if(completedSystemPhases(p)<systemPhases.length&&Number(p.meta.phase)>3) p.meta.phase=3;
+      queueSave('Systems rebuild progress updated');
+      render();
+    }
+    const phase=e.target.closest('[data-phase]');
+    if(phase&&!phase.disabled){ activeProject().meta.phase=Number(phase.dataset.phase); queueSave('Build phase updated'); render(); }
     const pref=e.target.closest('[data-preference]'); if(pref){ activeProject().preferences[pref.dataset.preference]=pref.dataset.value; queueSave('Display preference updated'); render(); }
     const galleryRemove=e.target.closest('[data-gallery-remove]');
     if(galleryRemove){
