@@ -102,11 +102,11 @@ export function initBuildBinder(): void {
       blank: { area:'', existing:'', target:'', supplier:'', status:'NOT STARTED' }
     },
     procurement: {
-      columns: [['id','PO / ID','text'],['item','Part / service','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Fit / status','taskstatus']],
+      columns: [['id','PO / ID','text'],['item','Part / service','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','procurementstatus']],
       blank: { id:'P-', item:'', supplier:'', ordered:'', cost:'', status:'NOT STARTED' }
     },
     consumables: {
-      columns: [['id','PO / ID','text'],['item','Item','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Fit / status','taskstatus']],
+      columns: [['id','PO / ID','text'],['item','Item','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','procurementstatus']],
       blank: { id:'C-', item:'', supplier:'', ordered:'', cost:'', status:'NOT STARTED' }
     },
     budget: {
@@ -420,7 +420,8 @@ export function initBuildBinder(): void {
   function selectOptions(type,value) {
     const choices={
       status:['DRAFT','TO VERIFY','VERIFIED','SUPERSEDED'], priority:['LOW','MEDIUM','HIGH','CRITICAL'], risk:['LOW','MEDIUM','HIGH'],
-      taskstatus:['NOT STARTED','IN PROGRESS','BLOCKED','OPEN','COMPLETE','CLOSED'], disposition:['RETAIN','REPAIR','REPLACE','MISSING','SURPLUS']
+      taskstatus:['NOT STARTED','IN PROGRESS','BLOCKED','OPEN','COMPLETE','CLOSED'],
+      procurementstatus:['NOT STARTED','NEEDED','ORDERED','COMPLETE'], disposition:['RETAIN','REPAIR','REPLACE','MISSING','SURPLUS']
     }[type] || [];
     return choices.map(o=>`<option value="${o}" ${value===o?'selected':''}>${o}</option>`).join('');
   }
@@ -430,7 +431,7 @@ export function initBuildBinder(): void {
     const headers=schema.columns.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th aria-label="Row actions"></th>';
     const body=rows.map(r=>`<tr data-row="${r._id}">${schema.columns.map(([key,label,type])=>{
       const value=r[key]??'';
-      if (['status','priority','risk','taskstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
+      if (['status','priority','risk','taskstatus','procurementstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
       if (type==='text') return `<td><textarea class="auto-grow auto-grow-compact" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="1" placeholder="Enter…">${esc(value)}</textarea></td>`;
       return `<td><input aria-label="${esc(label)}" data-table="${name}" data-key="${key}" type="${type}" value="${esc(value)}" placeholder="Enter…" ${type==='number'?'step="0.01"':''}></td>`;
     }).join('')}<td><button class="row-delete" data-delete-row="${name}" aria-label="Delete row" title="Delete row">×</button></td></tr>`).join('');
@@ -468,7 +469,14 @@ export function initBuildBinder(): void {
 
   function totals(p=activeProject()) {
     const b=p.tables.budget||[];
-    return ['budget','committed','paid','forecast'].reduce((acc,key)=>{acc[key]=b.reduce((s,r)=>s+(Number(r[key])||0),0);return acc;},{});
+    const totals=['budget','committed','paid','forecast'].reduce((acc,key)=>{acc[key]=b.reduce((s,r)=>s+(Number(r[key])||0),0);return acc;},{});
+    const completedCosts=['procurement','consumables']
+      .flatMap(key=>p.tables[key]||[])
+      .filter(item=>item.status==='COMPLETE')
+      .reduce((sum,item)=>sum+(Number(item.cost)||0),0);
+    totals.paid+=completedCosts;
+    totals.forecast+=completedCosts;
+    return totals;
   }
 
   function completion(p=activeProject()) {
