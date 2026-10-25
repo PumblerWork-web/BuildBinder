@@ -454,7 +454,7 @@ export function initBuildBinder(): void {
     const photos=p.photoGalleries?.[galleryKey]||[];
     const suggestions=galleryDefinitions[galleryKey]||[];
     const cards=photos.map((photo,index)=>`<figure class="gallery-photo" id="photo-${esc(photo.id)}" data-gallery-photo="${esc(photo.id)}">
-      <div class="gallery-photo-image"><img src="${photo.dataUrl}" alt="${esc(photo.caption||photo.name||`Project photo ${index+1}`)}"></div>
+      <div class="gallery-photo-image"><img src="${photo.dataUrl}" alt="${esc(photo.caption||photo.name||`Project photo ${index+1}`)}" data-photo-preview="${esc(galleryKey)}" data-photo-id="${esc(photo.id)}"></div>
       <figcaption><input type="text" data-gallery-caption="${galleryKey}" data-photo-id="${photo.id}" value="${esc(photo.caption||'')}" placeholder="Add a caption…" aria-label="Photo caption"></figcaption>
       ${galleryKey==='baseline'?`<label class="photo-condition-link">Link to condition summary<select data-photo-conditions data-photo-id="${esc(photo.id)}" aria-label="Link photo to a condition summary"><option value="">Not linked</option>${(p.tables.condition||[]).map(condition=>`<option value="${esc(condition._id)}" ${photo.conditionIds?.includes(condition._id)?'selected':''}>${esc([condition.area,condition.condition].filter(Boolean).join(' — ')||'Unspecified condition')}</option>`).join('')}</select></label>`:''}
       <div class="gallery-photo-actions">
@@ -647,11 +647,12 @@ export function initBuildBinder(): void {
   }
 
   function openModal(kicker,title,content,footer='') {
+    $('#modal').classList.remove('photo-preview');
     $('#modalKicker').textContent=kicker; $('#modalTitle').textContent=title; $('#modalContent').innerHTML=content; $('#modalFooter').innerHTML=footer;
     $('#modalBackdrop').hidden=false; document.body.style.overflow='hidden';
     setTimeout(()=>$('#modalContent').querySelector('input,select,textarea,button')?.focus(),20);
   }
-  function closeModal() { $('#modalBackdrop').hidden=true; document.body.style.overflow=''; }
+  function closeModal() { $('#modalBackdrop').hidden=true; $('#modal').classList.remove('photo-preview'); document.body.style.overflow=''; }
 
   function newProjectModal() {
     openModal('NEW RESTORATION','Create a clean project',`<div class="form-grid"><div class="field"><label>Project name</label><input id="newProjectName" placeholder="e.g. Dad’s FJ Holden"></div><div class="field"><label>Vehicle description</label><input id="newProjectVehicle" placeholder="Year / make / model / body"></div><div class="field"><label>Project code</label><input id="newProjectCode" placeholder="e.g. FJH-001"></div><div class="field"><label>Start from</label><select id="newProjectSource"><option value="blank">Clean reusable template</option><option value="clone">Clone current project structure and data</option></select></div></div><div class="callout" style="margin-top:14px"><strong>Reusable by design</strong>A clean project contains the same binder structure without Wild Plum XA specifications or claims.</div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="createProjectConfirm">Create project</button>`);
@@ -731,6 +732,16 @@ export function initBuildBinder(): void {
   }
 
   document.addEventListener('click', async e=>{
+    const photoPreview=e.target.closest('[data-photo-preview]');
+    if(photoPreview){
+      const gallery=photoPreview.dataset.photoPreview;
+      const photo=activeProject().photoGalleries[gallery]?.find(item=>item.id===photoPreview.dataset.photoId);
+      if(photo){
+        const caption=photo.caption||photo.name||'Project photo';
+        openModal('PHOTO PREVIEW',caption,`<img class="photo-preview-image" src="${photo.dataUrl}" alt="${esc(caption)}">`,'<button class="button ghost" data-modal-close>Close</button>');
+        $('#modal').classList.add('photo-preview');
+      }
+    }
     const section=e.target.closest('[data-section]'); if(section){ activeSection=section.dataset.section; location.hash=activeSection; $('#sidebar').classList.remove('open'); render(); }
     if(e.target.closest('[data-action="quick-add"]')||e.target.closest('#quickAddButton')) quickAddModal();
     if(e.target.closest('[data-action="print"]')||e.target.closest('#printButton')) window.print();
