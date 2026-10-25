@@ -175,6 +175,7 @@ a { color: var(--cyan); }
 .field input, .field select, .field textarea { width: 100%; border: 1px solid var(--line); border-radius: 0; padding: 10px 11px; color: var(--text); background: rgba(3,15,25,.58); transition: .15s; }
 .field input, .field select { min-height: 41px; }
 .field textarea { min-height: 96px; height: auto; overflow-y: hidden; resize: none; line-height: 1.5; }
+.field textarea.auto-grow-compact { min-height: 40px; padding-block: 10px; }
 .field input:hover, .field select:hover, .field textarea:hover { border-color: var(--line-strong); }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--cyan); background: rgba(5,25,39,.9); outline: none; box-shadow: 0 0 0 3px rgba(118,211,232,.08); }
 .field select option { color: #0d1d25; }
@@ -188,6 +189,7 @@ a { color: var(--cyan); }
 .data-table tbody tr:hover { background: rgba(118,211,232,.06); }
 .data-table td input, .data-table td select, .data-table td textarea { width: 100%; min-width: 80px; border: 0; border-bottom: 1px dashed transparent; padding: 3px 0; color: var(--text); background: transparent; font-size: 11px; }
 .data-table td textarea { min-height: 48px; height: auto; overflow-y: hidden; resize: none; }
+.data-table td textarea.auto-grow-compact { min-height: 24px; line-height: 1.45; }
 .data-table td input:focus, .data-table td select:focus, .data-table td textarea:focus { outline: 0; border-bottom-color: var(--cyan); }
 .data-table td select option { color: #0d1d25; }
 .table-actions { display: flex; gap: 7px; margin-top: 12px; }

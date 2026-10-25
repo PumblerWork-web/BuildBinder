@@ -389,6 +389,8 @@ export function initBuildBinder(): void {
       control=`<select data-field="${key}" data-path="${path}">${opts.map(o=>`<option value="${esc(o)}" ${value===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
     } else if(type==='textarea') {
       control=`<textarea class="auto-grow" data-field="${key}" data-path="${path}" placeholder="${esc(placeholder)}" rows="3">${esc(value)}</textarea>`;
+    } else if(type==='text') {
+      control=`<textarea class="auto-grow auto-grow-compact" data-field="${key}" data-path="${path}" placeholder="${esc(placeholder)}" rows="1">${esc(value)}</textarea>`;
     } else {
       control=`<input data-field="${key}" data-path="${path}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}">`;
     }
@@ -411,6 +413,7 @@ export function initBuildBinder(): void {
     const body=rows.map(r=>`<tr data-row="${r._id}">${schema.columns.map(([key,label,type])=>{
       const value=r[key]??'';
       if (['status','priority','risk','taskstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
+      if (type==='text') return `<td><textarea class="auto-grow auto-grow-compact" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="1" placeholder="Enter…">${esc(value)}</textarea></td>`;
       return `<td><input aria-label="${esc(label)}" data-table="${name}" data-key="${key}" type="${type}" value="${esc(value)}" placeholder="Enter…" ${type==='number'?'step="0.01"':''}></td>`;
     }).join('')}<td><button class="row-delete" data-delete-row="${name}" aria-label="Delete row" title="Delete row">×</button></td></tr>`).join('');
     return `<div class="table-wrap"><table class="data-table"><thead><tr>${headers}</tr></thead><tbody>${body || `<tr><td colspan="${schema.columns.length+1}"><div class="empty-state"><h3>${esc(emptyText)}</h3><p>Add the first record when it is needed.</p></div></td></tr>`}</tbody></table></div><div class="table-actions"><button class="button ghost small" data-add-row="${name}">＋ Add row</button></div>`;
@@ -571,7 +574,8 @@ export function initBuildBinder(): void {
   function autoGrowTextarea(textarea) {
     if(!textarea || textarea.tagName!=='TEXTAREA') return;
     textarea.style.height='auto';
-    textarea.style.height=`${Math.max(textarea.scrollHeight,72)}px`;
+    const minHeight=textarea.classList.contains('auto-grow-compact')?24:72;
+    textarea.style.height=`${Math.max(textarea.scrollHeight,minHeight)}px`;
   }
 
   function initialiseAutoGrow(root=document) {
