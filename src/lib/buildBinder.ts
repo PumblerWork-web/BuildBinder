@@ -325,6 +325,7 @@ export function initBuildBinder(): void {
   let activeSection = location.hash.replace('#','') || 'dashboard';
   if (!sectionDefs.some(s=>s.id===activeSection)) activeSection='dashboard';
   let saveTimer;
+  let pendingProjectImage=null;
   const editableChecklists = new Set();
 
   const $ = selector => document.querySelector(selector);
@@ -681,7 +682,12 @@ export function initBuildBinder(): void {
     $('#modalBackdrop').hidden=false; document.body.style.overflow='hidden';
     setTimeout(()=>$('#modalContent').querySelector('input,select,textarea,button')?.focus(),20);
   }
-  function closeModal() { $('#modalBackdrop').hidden=true; $('#modal').classList.remove('photo-preview'); document.body.style.overflow=''; }
+  function closeModal() {
+    $('#modalBackdrop').hidden=true;
+    $('#modal').classList.remove('photo-preview');
+    document.body.style.overflow='';
+    if(pendingProjectImage){ pendingProjectImage.bitmap.close(); pendingProjectImage=null; }
+  }
 
   function newProjectModal() {
     openModal('NEW RESTORATION','Create a new project',`<div class="form-grid"><div class="field"><label>Project name</label><input id="newProjectName" placeholder="e.g. Dad’s FJ Holden"></div><div class="field"><label>Vehicle description</label><input id="newProjectVehicle" placeholder="Year / make / model / body"></div><div class="field"><label>Project code</label><input id="newProjectCode" placeholder="e.g. FJH-001"></div><div class="field"><label>Start from</label><select id="newProjectSource"><option value="blank">Clean reusable template</option><option value="prepopulated">Generic restoration starter — pre-filled lists, no vehicle details</option><option value="clone">Clone current project structure and data</option></select></div></div><div class="callout" style="margin-top:14px"><strong>Choose your starting point</strong>The generic restoration starter includes common work areas, system registers, test stages and actions, without vehicle-specific information.</div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="createProjectConfirm">Create project</button>`);
@@ -742,25 +748,58 @@ export function initBuildBinder(): void {
     return { id:uid('photo'), dataUrl:canvas.toDataURL('image/webp',.76), name:file.name, caption:'', type:file.type, width:canvas.width, height:canvas.height, added:new Date().toISOString() };
   }
 
+  function projectImageCrop(bitmap,zoom,x,y,width,height) {
+    const targetRatio=16/8.5;
+    let cropWidth=Math.min(bitmap.width,bitmap.height*targetRatio);
+    let cropHeight=cropWidth/targetRatio;
+    cropWidth/=zoom;
+    cropHeight/=zoom;
+    const left=(bitmap.width-cropWidth)*x;
+    const top=(bitmap.height-cropHeight)*y;
+    const canvas=document.createElement('canvas');
+    canvas.width=width;
+    canvas.height=height;
+    const context=canvas.getContext('2d');
+    context.imageSmoothingEnabled=true;
+    context.imageSmoothingQuality='high';
+    context.drawImage(bitmap,left,top,cropWidth,cropHeight,0,0,width,height);
+    return canvas;
+  }
+
+  function updateProjectImageCropPreview() {
+    if(!pendingProjectImage) return;
+    const zoom=Number($('#projectImageZoom').value);
+    const x=Number($('#projectImageX').value)/100;
+    const y=Number($('#projectImageY').value)/100;
+    const canvas=projectImageCrop(pendingProjectImage.bitmap,zoom,x,y,480,255);
+    $('#projectImageCropPreview').src=canvas.toDataURL('image/webp',.82);
+  }
+
   async function prepareProjectImage(file) {
     const allowed=['image/png','image/jpeg','image/webp'];
     if(!allowed.includes(file.type)) throw new Error('Choose a PNG, JPG or WebP image.');
     if(file.size>10*1024*1024) throw new Error('The image must be smaller than 10 MB.');
     const bitmap=await createImageBitmap(file);
-    const maxWidth=1600, maxHeight=900;
-    const scale=Math.min(1,maxWidth/bitmap.width,maxHeight/bitmap.height);
-    const canvas=document.createElement('canvas');
-    canvas.width=Math.max(1,Math.round(bitmap.width*scale));
-    canvas.height=Math.max(1,Math.round(bitmap.height*scale));
-    const ctx=canvas.getContext('2d');
-    ctx.imageSmoothingEnabled=true;
-    ctx.imageSmoothingQuality='high';
-    ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
-    const dataUrl=canvas.toDataURL('image/webp',.88);
-    return { dataUrl, name:file.name, type:file.type, width:canvas.width, height:canvas.height, updated:new Date().toISOString() };
+    pendingProjectImage={bitmap,name:file.name,type:file.type};
+    openModal('PROJECT IMAGE','Crop project image',`<div class="project-image-crop"><div class="project-image-crop-frame"><img id="projectImageCropPreview" alt="Project image crop preview"></div><div class="project-image-crop-controls"><label>Zoom <input id="projectImageZoom" data-crop-control type="range" min="1" max="3" step="0.01" value="1"></label><label>Horizontal position <input id="projectImageX" data-crop-control type="range" min="0" max="100" value="50"></label><label>Vertical position <input id="projectImageY" data-crop-control type="range" min="0" max="100" value="50"></label></div></div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="saveProjectImageCrop">Use cropped image</button>`);
+    updateProjectImageCropPreview();
   }
 
   document.addEventListener('click', async e=>{
+    if(e.target.closest('#saveProjectImageCrop')){
+      if(!pendingProjectImage) return;
+      const original=activeProject().projectImage;
+      const {bitmap,name,type}=pendingProjectImage;
+      const crop=projectImageCrop(bitmap,Number($('#projectImageZoom').value),Number($('#projectImageX').value)/100,Number($('#projectImageY').value)/100,1200,638);
+      const image={dataUrl:crop.toDataURL('image/webp',.88),name,type,width:crop.width,height:crop.height,updated:new Date().toISOString()};
+      bitmap.close();
+      pendingProjectImage=null;
+      activeProject().projectImage=image;
+      if(!persistStateNow('',false)) activeProject().projectImage=original;
+      else toast('Project image updated','The cropped image is stored locally with this project.');
+      closeModal();
+      updateProjectChrome();
+    }
     const photoPreview=e.target.closest('[data-photo-preview]');
     if(photoPreview){
       const gallery=photoPreview.dataset.photoPreview;
@@ -861,6 +900,7 @@ export function initBuildBinder(): void {
 
   document.addEventListener('input', e=>{
     if(e.target.matches('textarea')) autoGrowTextarea(e.target);
+    if(e.target.matches('[data-crop-control]')) updateProjectImageCropPreview();
     if(e.target.matches('[data-field]')){
       const p=activeProject(); const source=e.target.dataset.path==='meta'?p.meta:p.fields; source[e.target.dataset.field]=e.target.value; queueSave('Field updated');
     }
@@ -941,15 +981,12 @@ export function initBuildBinder(): void {
       }
     }
     if(e.target.id==='projectImageInput' && e.target.files[0]){
-      const original=activeProject().projectImage;
       try {
-        activeProject().projectImage=await prepareProjectImage(e.target.files[0]);
-        if(!persistStateNow('',false)) activeProject().projectImage=original;
-        else toast('Project image updated','The image is stored locally with this project.');
-        updateProjectChrome();
+        await prepareProjectImage(e.target.files[0]);
       } catch(err) {
-        e.target.value='';
         toast('Image could not be added',err.message);
+      } finally {
+        e.target.value='';
       }
     }
   });

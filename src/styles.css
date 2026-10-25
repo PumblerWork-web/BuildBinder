@@ -292,6 +292,12 @@ a { color: var(--cyan); }
 .modal.photo-preview { width: fit-content; max-width: calc(100vw - 50px); }
 .modal.photo-preview .modal-content { padding: 12px; }
 .photo-preview-image { display: block; width: auto; height: auto; max-width: calc(100vw - 76px); max-height: calc(100vh - 170px); object-fit: contain; }
+.project-image-crop { display: grid; gap: 16px; }
+.project-image-crop-frame { width: min(100%,480px); aspect-ratio: 16 / 8.5; margin-inline: auto; overflow: hidden; border: 1px solid var(--line-strong); background: rgba(2,14,23,.8); }
+.project-image-crop-frame img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.project-image-crop-controls { display: grid; gap: 10px; }
+.project-image-crop-controls label { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 12px; color: var(--muted); font: 600 9px var(--mono); text-transform: uppercase; }
+.project-image-crop-controls input { width: 100%; accent-color: var(--cyan); }
 .modal > header { min-height: 68px; padding: 14px 17px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
 .modal > header h2 { margin: 4px 0 0; font: 600 25px var(--condensed); }
 .modal-content { overflow: auto; padding: 18px; }
