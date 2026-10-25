@@ -768,8 +768,18 @@ export function initBuildBinder(): void {
     const galleryRemove=e.target.closest('[data-gallery-remove]');
     if(galleryRemove){
       const gallery=galleryRemove.dataset.galleryRemove;
-      activeProject().photoGalleries[gallery]=activeProject().photoGalleries[gallery].filter(photo=>photo.id!==galleryRemove.dataset.photoId);
-      queueSave('Photo removed'); render();
+      const photo=activeProject().photoGalleries[gallery]?.find(item=>item.id===galleryRemove.dataset.photoId);
+      openModal('REMOVE PHOTO','Are you sure you want to remove this photo?',`<p>${esc(photo?.caption||photo?.name||'This photo')} will be removed from this project.</p>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button danger" data-confirm-photo-remove="${esc(gallery)}" data-photo-id="${esc(galleryRemove.dataset.photoId)}">Remove photo</button>`);
+    }
+    const confirmPhotoRemove=e.target.closest('[data-confirm-photo-remove]');
+    if(confirmPhotoRemove){
+      const gallery=confirmPhotoRemove.dataset.confirmPhotoRemove;
+      const photoId=confirmPhotoRemove.dataset.photoId;
+      const project=activeProject();
+      project.photoGalleries[gallery]=project.photoGalleries[gallery].filter(photo=>photo.id!==photoId);
+      queueSave('Photo removed');
+      closeModal();
+      render();
     }
     if(e.target.closest('#projectImageRemove')){
       activeProject().projectImage=null;
