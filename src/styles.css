@@ -32,6 +32,7 @@
 html { min-height: 100%; background: var(--bg-deep); scroll-behavior: smooth; }
 body { margin: 0; min-height: 100vh; color: var(--text); background: radial-gradient(circle at 78% -10%, rgba(41,104,131,.32), transparent 34%), var(--bg); font-family: var(--sans); font-size: 14px; }
 button, input, select, textarea { font: inherit; }
+select option { color: #10202a; background-color: #e8f8fc; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; }
 button, select { cursor: pointer; }
@@ -54,7 +55,6 @@ a { color: var(--cyan); }
 .select-wrap { position: relative; }
 .select-wrap::after { content: "⌄"; position: absolute; right: 10px; top: 7px; color: var(--cyan); pointer-events: none; }
 .topbar-project select { width: 100%; appearance: none; border: 0; border-bottom: 1px solid var(--line-strong); border-radius: 0; padding: 3px 28px 6px 0; color: var(--text); background: transparent; font: 600 15px var(--sans); }
-.topbar-project select option { color: #10202a; }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
 .save-state { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font: 500 11px var(--mono); }
 .save-state i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(114,198,156,.1); }
@@ -178,7 +178,6 @@ a { color: var(--cyan); }
 .field textarea.auto-grow-compact { min-height: 40px; padding-block: 10px; }
 .field input:hover, .field select:hover, .field textarea:hover { border-color: var(--line-strong); }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--cyan); background: rgba(5,25,39,.9); outline: none; box-shadow: 0 0 0 3px rgba(118,211,232,.08); }
-.field select option { color: #0d1d25; }
 .field input::placeholder, .field textarea::placeholder { color: #607985; font-style: italic; }
 
 .table-wrap { overflow-x: auto; }
@@ -191,7 +190,6 @@ a { color: var(--cyan); }
 .data-table td textarea { min-height: 48px; height: auto; overflow-y: hidden; resize: none; }
 .data-table td textarea.auto-grow-compact { min-height: 24px; line-height: 1.45; }
 .data-table td input:focus, .data-table td select:focus, .data-table td textarea:focus { outline: 0; border-bottom-color: var(--cyan); }
-.data-table td select option { color: #0d1d25; }
 .table-actions { display: flex; gap: 7px; margin-top: 12px; }
 .row-delete { width: 25px; height: 25px; border: 0; color: #78909a; background: transparent; font-size: 17px; }
 .row-delete:hover { color: var(--red); }
