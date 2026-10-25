@@ -85,6 +85,10 @@ export function initBuildBinder(): void {
       columns: [['area','Area','text'],['condition','Condition / evidence','text'],['strategy','Repair strategy','text'],['specialist','Specialist','text'],['status','Status','taskstatus']],
       blank: { area:'', condition:'', strategy:'', specialist:'', status:'NOT STARTED' }
     },
+    rustRepairs: {
+      columns: [['area','Area','text'],['condition','Condition','text'],['requiredRepair','Required repair','text'],['patchPanelUsed','Patch panel used','text'],['status','Repair complete','taskstatus']],
+      blank: { area:'', condition:'', requiredRepair:'', patchPanelUsed:'', status:'NOT STARTED' }
+    },
     systems: {
       columns: [['system','System','text'],['existing','Existing / evidence','text'],['planned','Planned work / target','text'],['parts','Parts / supplier','text'],['verification','Verification','text'],['status','Status','taskstatus']],
       blank: { system:'', existing:'', planned:'', parts:'', verification:'', status:'NOT STARTED' }
@@ -218,6 +222,7 @@ export function initBuildBinder(): void {
         ],
         inventory: [],
         body: ['Front structure / panels','Cabin / floor / sills','Rear structure / quarters','Doors / hinges / gaps','Boot / bonnet / closures','Underbody / mounts'].map(area=>row({area,condition:'',strategy:'',specialist:'',status:'NOT STARTED'})),
+        rustRepairs: [],
         chassis: ['Front suspension','Rear suspension','Steering','Brakes','Wheels / tyres','Bearings / hubs'].map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'})),
         powertrain: ['Engine','Transmission','Differential / axle','Fuel','Cooling','Induction','Exhaust','Lubrication'].map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'})),
         circuits: ['Starting / charging','Ignition / engine','Lighting','Instruments','Accessories','Added circuits'].map(circuit=>row({circuit,supply:'',route:'',earth:'',test:'',status:'NOT STARTED'})),
@@ -257,6 +262,8 @@ export function initBuildBinder(): void {
   }
 
   function ensureProjectShape(project) {
+    project.tables=project.tables||{};
+    if(!Array.isArray(project.tables.rustRepairs)) project.tables.rustRepairs=[];
     project.photos=project.photos||{};
     project.photoGalleries=project.photoGalleries||{};
     Object.keys(galleryDefinitions).forEach(key=>{ if(!Array.isArray(project.photoGalleries[key])) project.photoGalleries[key]=[]; });
@@ -350,7 +357,7 @@ export function initBuildBinder(): void {
     const map={
       identity:(p.tables.evidence?.length||0)+(p.tables.history?.length||0), baseline:p.tables.condition?.length||0,
       planning:(p.tables.actions?.length||0)+(p.tables.decisions?.length||0)+(p.tables.risks?.length||0),
-      disassembly:p.tables.inventory?.length||0, body:p.tables.body?.length||0, chassis:p.tables.chassis?.length||0,
+      disassembly:p.tables.inventory?.length||0, body:(p.tables.body?.length||0)+(p.tables.rustRepairs?.length||0), chassis:p.tables.chassis?.length||0,
       powertrain:p.tables.powertrain?.length||0, electrical:p.tables.circuits?.length||0, interior:p.tables.trim?.length||0,
       commercial:(p.tables.procurement?.length||0)+(p.tables.budget?.length||0), worklog:(p.tables.worklog?.length||0)+(p.tables.issues?.length||0),
       handover:(p.tables.compliance?.length||0)+(p.tables.tests?.length||0), library:p.tables.references?.length||0,
@@ -461,7 +468,7 @@ export function initBuildBinder(): void {
 
   function completion(p=activeProject()) {
     const checks=Object.values(p.checklists||{}).flat();
-    const rows=['actions','body','chassis','powertrain','circuits','trim','compliance','tests'].flatMap(k=>p.tables[k]||[]).filter(r=>r.status);
+    const rows=['actions','body','rustRepairs','chassis','powertrain','circuits','trim','compliance','tests'].flatMap(k=>p.tables[k]||[]).filter(r=>r.status);
     const complete=checks.filter(x=>x.done).length + rows.filter(r=>['COMPLETE','CLOSED','VERIFIED'].includes(r.status)).length;
     const total=checks.length+rows.length;
     return total?Math.round(complete/total*100):0;
@@ -533,7 +540,7 @@ export function initBuildBinder(): void {
 
   function body() {
     return header('06','Body, shell & paint','Document structure first; decide finish after fit and repair strategy are understood.')+
-    `<div class="section-grid">${card('Body & structural assessment',table('body'),{span:'span-12'})}${card('Paint & finish direction',`<div class="form-grid">${field('Colour / finish direction','colourDirection')}${field('Code / formula','paintCode')}${field('Paint system / brand','paintSystem')}${field('Gloss / texture target','glossTarget')}${field('Underbody / cavity protection','protection')}${field('Decision status','bodyPaintStatus',{options:fieldTypes.status})}</div>`,{span:'half'})}${card('Finish evidence',photoGallery('body'),{span:'half'})}<div class="callout warning" style="grid-column:span 12"><strong>Hold point</strong>Complete structural inspection, trial assembly and panel-gap approval before final paint preparation.</div></div>`;
+    `<div class="section-grid">${card('Body & structural assessment',table('body'),{span:'span-12'})}${card('Rust repair register',table('rustRepairs','Rust repair register','No rust repairs recorded yet'),{span:'span-12'})}${card('Paint & finish direction',`<div class="form-grid">${field('Colour / finish direction','colourDirection')}${field('Code / formula','paintCode')}${field('Paint system / brand','paintSystem')}${field('Gloss / texture target','glossTarget')}${field('Underbody / cavity protection','protection')}${field('Decision status','bodyPaintStatus',{options:fieldTypes.status})}</div>`,{span:'half'})}${card('Finish evidence',photoGallery('body'),{span:'half'})}<div class="callout warning" style="grid-column:span 12"><strong>Hold point</strong>Complete structural inspection, trial assembly and panel-gap approval before final paint preparation.</div></div>`;
   }
 
   function chassis() {
