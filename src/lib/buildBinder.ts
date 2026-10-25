@@ -266,6 +266,34 @@ export function initBuildBinder(): void {
     return project;
   }
 
+  function prepopulatedGenericProject(name,vehicle) {
+    const project=genericProject(name,vehicle);
+    project.tables.actions=[
+      'Complete vehicle identity and history research',
+      'Photograph and record baseline condition',
+      'Confirm restoration goals and scope',
+      'Inspect body, structure and corrosion',
+      'Create parts inventory and storage records',
+      'Plan and record system rebuild work',
+      'Document testing, compliance and handover'
+    ].map(action=>row({priority:'MEDIUM',action,owner:'',due:'',status:'NOT STARTED'}));
+    project.tables.body=['Front structure / panels','Cabin / floor / sills','Rear structure / quarters','Doors / hinges / gaps','Boot / bonnet / closures','Underbody / mounts']
+      .map(area=>row({area,condition:'',strategy:'',specialist:'',status:'NOT STARTED'}));
+    project.tables.chassis=['Front suspension','Rear suspension','Steering','Brakes','Wheels / tyres','Bearings / hubs']
+      .map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'}));
+    project.tables.powertrain=['Engine','Transmission','Differential / axle','Fuel','Cooling','Induction','Exhaust','Lubrication']
+      .map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'}));
+    project.tables.circuits=['Starting / charging','Ignition / engine','Lighting','Instruments','Accessories','Added circuits']
+      .map(circuit=>row({circuit,supply:'',route:'',earth:'',test:'',status:'NOT STARTED'}));
+    project.tables.trim=['Seats / upholstery','Carpet / insulation','Dashboard / instruments','Door / quarter trims','Headlining / roof trim','Brightwork / hardware','Glass / seals']
+      .map(area=>row({area,existing:'',target:'',supplier:'',status:'NOT STARTED'}));
+    project.tables.compliance=['Ownership / registration','Identity / modification approval','Roadworthiness / inspection','Insurance / valuation']
+      .map(requirement=>row({requirement,authority:'',evidence:'',date:'',status:'NOT STARTED'}));
+    project.tables.tests=['Static / no start','First start','Workshop movement','Low-speed road','Extended road','Final acceptance']
+      .map(stage=>row({stage,checks:'',result:'',issues:'',approved:'',status:'NOT STARTED'}));
+    return project;
+  }
+
   function ensureProjectShape(project) {
     project.tables=project.tables||{};
     if(!Array.isArray(project.tables.rustRepairs)) project.tables.rustRepairs=[];
@@ -656,7 +684,7 @@ export function initBuildBinder(): void {
   function closeModal() { $('#modalBackdrop').hidden=true; $('#modal').classList.remove('photo-preview'); document.body.style.overflow=''; }
 
   function newProjectModal() {
-    openModal('NEW RESTORATION','Create a clean project',`<div class="form-grid"><div class="field"><label>Project name</label><input id="newProjectName" placeholder="e.g. Dad’s FJ Holden"></div><div class="field"><label>Vehicle description</label><input id="newProjectVehicle" placeholder="Year / make / model / body"></div><div class="field"><label>Project code</label><input id="newProjectCode" placeholder="e.g. FJH-001"></div><div class="field"><label>Start from</label><select id="newProjectSource"><option value="blank">Clean reusable template</option><option value="clone">Clone current project structure and data</option></select></div></div><div class="callout" style="margin-top:14px"><strong>Reusable by design</strong>A clean project contains the same binder structure without Wild Plum XA specifications or claims.</div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="createProjectConfirm">Create project</button>`);
+    openModal('NEW RESTORATION','Create a new project',`<div class="form-grid"><div class="field"><label>Project name</label><input id="newProjectName" placeholder="e.g. Dad’s FJ Holden"></div><div class="field"><label>Vehicle description</label><input id="newProjectVehicle" placeholder="Year / make / model / body"></div><div class="field"><label>Project code</label><input id="newProjectCode" placeholder="e.g. FJH-001"></div><div class="field"><label>Start from</label><select id="newProjectSource"><option value="blank">Clean reusable template</option><option value="prepopulated">Generic restoration starter — pre-filled lists, no vehicle details</option><option value="clone">Clone current project structure and data</option></select></div></div><div class="callout" style="margin-top:14px"><strong>Choose your starting point</strong>The generic restoration starter includes common work areas, system registers, test stages and actions, without vehicle-specific information.</div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="createProjectConfirm">Create project</button>`);
   }
 
   function dataModal() {
@@ -819,7 +847,9 @@ export function initBuildBinder(): void {
     const cmd=e.target.closest('[data-command-section]'); if(cmd){ activeSection=cmd.dataset.commandSection; location.hash=activeSection; closeModal(); render(); }
     if(e.target.closest('#createProjectConfirm')){
       const name=$('#newProjectName').value.trim()||'Untitled restoration'; const vehicle=$('#newProjectVehicle').value.trim()||'Vehicle details to enter';
-      let p=$('#newProjectSource').value==='clone'?clone(activeProject()):genericProject(name,vehicle); p.id=uid('project'); p.meta.name=name; p.meta.vehicle=vehicle; p.meta.code=$('#newProjectCode').value.trim()||'NEW-001'; p.meta.showcase=false; p.meta.updated=today();
+      const source=$('#newProjectSource').value;
+      let p=source==='clone'?clone(activeProject()):source==='prepopulated'?prepopulatedGenericProject(name,vehicle):genericProject(name,vehicle);
+      p.id=uid('project'); p.meta.name=name; p.meta.vehicle=vehicle; p.meta.code=$('#newProjectCode').value.trim()||'NEW-001'; p.meta.showcase=false; p.meta.updated=today();
       state.projects.push(p); state.activeProjectId=p.id; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); closeModal(); activeSection='dashboard'; location.hash='dashboard'; render(); toast('Project created',`${name} is ready.`);
     }
     if(e.target.closest('#quickAddConfirm')) quickAdd();
