@@ -62,7 +62,7 @@ export function initBuildBinder(): void {
       blank: { date:'', event:'', source:'', status:'TO VERIFY' }
     },
     condition: {
-      columns: [['area','Area','text'],['condition','Condition summary','text'],['priority','Priority','priority'],['photoEvidence','Evidence photo','conditionphotos']],
+      columns: [['area','Area','text'],['condition','Observed condition','text'],['priority','Priority','priority'],['photoEvidence','Evidence photo','conditionphotos']],
       blank: { area:'', condition:'', priority:'MEDIUM', evidence:'', photoEvidence:'' }
     },
     decisions: {
@@ -433,9 +433,8 @@ export function initBuildBinder(): void {
       const value=r[key]??'';
       if(type==='conditionphotos'){
         const linkedPhotos=(p.photoGalleries?.baseline||[]).filter(photo=>photo.conditionIds?.includes(r._id));
-        const links=linkedPhotos.map(photo=>`<a class="condition-photo-link" href="#photo-${esc(photo.id)}" data-photo-link="${esc(photo.id)}">${esc(photo.caption||photo.name||'View photo')}</a>`).join('');
         const legacyEvidence=r.evidence?`<small class="legacy-evidence">${esc(r.evidence)}</small>`:'';
-        return `<td class="condition-photo-cell">${links||'<span class="muted">No linked photos</span>'}${legacyEvidence}</td>`;
+        return `<td class="condition-photo-cell"><select data-condition-photo-select aria-label="Evidence photos for ${esc(r.area||'condition summary')}" ${linkedPhotos.length?'':'disabled'}><option value="">${linkedPhotos.length?'Select a photo…':'No linked photos'}</option>${linkedPhotos.map(photo=>`<option value="${esc(photo.id)}">${esc(photo.caption||photo.name||'Untitled photo')}</option>`).join('')}</select>${legacyEvidence}</td>`;
       }
       if (['status','priority','risk','taskstatus','procurementstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
       if (type==='text') return `<td><textarea class="auto-grow auto-grow-compact" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="1" placeholder="Enter…">${esc(value)}</textarea></td>`;
@@ -457,7 +456,7 @@ export function initBuildBinder(): void {
     const cards=photos.map((photo,index)=>`<figure class="gallery-photo" id="photo-${esc(photo.id)}" data-gallery-photo="${esc(photo.id)}">
       <div class="gallery-photo-image"><img src="${photo.dataUrl}" alt="${esc(photo.caption||photo.name||`Project photo ${index+1}`)}"></div>
       <figcaption><input type="text" data-gallery-caption="${galleryKey}" data-photo-id="${photo.id}" value="${esc(photo.caption||'')}" placeholder="Add a caption…" aria-label="Photo caption"></figcaption>
-      ${galleryKey==='baseline'?`<label class="photo-condition-link">Link to condition summary<select multiple data-photo-conditions data-photo-id="${esc(photo.id)}" aria-label="Link photo to condition summaries">${(p.tables.condition||[]).map(condition=>`<option value="${esc(condition._id)}" ${photo.conditionIds?.includes(condition._id)?'selected':''}>${esc([condition.area,condition.condition].filter(Boolean).join(' — ')||'Unspecified condition')}</option>`).join('')}</select></label>`:''}
+      ${galleryKey==='baseline'?`<label class="photo-condition-link">Link to condition summary<select data-photo-conditions data-photo-id="${esc(photo.id)}" aria-label="Link photo to a condition summary"><option value="">Not linked</option>${(p.tables.condition||[]).map(condition=>`<option value="${esc(condition._id)}" ${photo.conditionIds?.includes(condition._id)?'selected':''}>${esc([condition.area,condition.condition].filter(Boolean).join(' — ')||'Unspecified condition')}</option>`).join('')}</select></label>`:''}
       <div class="gallery-photo-actions">
         <label for="replace-${photo.id}">Replace</label><input hidden id="replace-${photo.id}" type="file" accept="image/png,image/jpeg,image/webp" data-gallery-replace="${galleryKey}" data-photo-id="${photo.id}">
         <button type="button" data-gallery-remove="${galleryKey}" data-photo-id="${photo.id}">Remove</button>
@@ -732,11 +731,6 @@ export function initBuildBinder(): void {
   }
 
   document.addEventListener('click', async e=>{
-    const photoLink=e.target.closest('[data-photo-link]');
-    if(photoLink){
-      e.preventDefault();
-      document.getElementById(`photo-${photoLink.dataset.photoLink}`)?.scrollIntoView({behavior:'smooth',block:'center'});
-    }
     const section=e.target.closest('[data-section]'); if(section){ activeSection=section.dataset.section; location.hash=activeSection; $('#sidebar').classList.remove('open'); render(); }
     if(e.target.closest('[data-action="quick-add"]')||e.target.closest('#quickAddButton')) quickAddModal();
     if(e.target.closest('[data-action="print"]')||e.target.closest('#printButton')) window.print();
@@ -841,7 +835,7 @@ export function initBuildBinder(): void {
       if(photo){
         photo.caption=e.target.value;
         queueSave('Photo caption updated');
-        app.querySelectorAll(`[data-photo-link="${photo.id}"]`).forEach(link=>link.textContent=photo.caption||photo.name||'View photo');
+        app.querySelectorAll(`[data-condition-photo-select] option[value="${photo.id}"]`).forEach(option=>option.textContent=photo.caption||photo.name||'Untitled photo');
       }
     }
     if(e.target.matches('[data-checklist-label]')){
@@ -859,10 +853,14 @@ export function initBuildBinder(): void {
     if(e.target.matches('[data-photo-conditions]')){
       const photo=activeProject().photoGalleries.baseline.find(item=>item.id===e.target.dataset.photoId);
       if(photo){
-        photo.conditionIds=[...e.target.selectedOptions].map(option=>option.value);
+        photo.conditionIds=e.target.value?[e.target.value]:[];
         queueSave('Photo condition links updated');
         render(true);
       }
+    }
+    if(e.target.matches('[data-condition-photo-select]')&&e.target.value){
+      document.getElementById(`photo-${e.target.value}`)?.scrollIntoView({behavior:'smooth',block:'center'});
+      e.target.value='';
     }
     if(e.target===projectSelect){ state.activeProjectId=e.target.value; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); render(); toast('Project switched',activeProject().meta.name); }
     if(e.target.id==='importFile' && e.target.files[0]) importJson(e.target.files[0]);
