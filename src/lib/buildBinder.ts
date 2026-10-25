@@ -479,7 +479,7 @@ export function initBuildBinder(): void {
     `<div class="section-grid">
       ${card('Vehicle identity',`<div class="form-grid three">${field('Manufacturer','manufacturer')}${field('Model','model')}${field('Series','series')}${field('Body style','bodyStyle')}${field('Build date','buildDate')}${field('VIN / chassis number','vin')}${field('Registration','registration')}${field('Engine number','engineNumber')}${field('Transmission identifier','transmissionId')}${field('Paint code / original colour','paintCode')}${field('Trim code / original trim','trimCode')}${field('Odometer','odometer')}${field('Identity confidence','identityStatus',{type:'status'})}${field('History summary','historySummary',{type:'textarea',span:'span-2'})}</div><div class="callout warning" style="margin-top:14px"><strong>Evidence standard</strong>Photograph identifiers in place, transcribe exactly and record their locations. If an identifier is unreadable, record that fact rather than guessing.</div>`,{span:'span-12'})}
       ${card('Identity photographs',photoGallery('identity'),{span:'span-12'})}
-      ${card('Provenance timeline',table('history'),{span:'span-12'})}
+      ${card('History of ownership',table('history'),{span:'span-12'})}
       ${card('Evidence register',table('evidence'),{span:'span-12'})}
     </div>`;
   }
