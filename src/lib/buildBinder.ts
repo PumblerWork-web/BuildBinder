@@ -105,6 +105,10 @@ export function initBuildBinder(): void {
       columns: [['id','PO / ID','text'],['item','Part / service','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Fit / status','taskstatus']],
       blank: { id:'P-', item:'', supplier:'', ordered:'', cost:'', status:'NOT STARTED' }
     },
+    consumables: {
+      columns: [['id','PO / ID','text'],['item','Item','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Fit / status','taskstatus']],
+      blank: { id:'C-', item:'', supplier:'', ordered:'', cost:'', status:'NOT STARTED' }
+    },
     budget: {
       columns: [['category','Category','text'],['budget','Budget','number'],['committed','Committed','number'],['paid','Paid','number'],['forecast','Forecast','number']],
       blank: { category:'', budget:'', committed:'', paid:'', forecast:'' }
@@ -227,7 +231,7 @@ export function initBuildBinder(): void {
         powertrain: ['Engine','Transmission','Differential / axle','Fuel','Cooling','Induction','Exhaust','Lubrication'].map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'})),
         circuits: ['Starting / charging','Ignition / engine','Lighting','Instruments','Accessories','Added circuits'].map(circuit=>row({circuit,supply:'',route:'',earth:'',test:'',status:'NOT STARTED'})),
         trim: ['Seats / upholstery','Carpet / insulation','Dashboard / instruments','Door / quarter trims','Headlining / roof trim','Brightwork / hardware','Glass / seals'].map(area=>row({area,existing:'',target:'',supplier:'',status:'NOT STARTED'})),
-        procurement: [],
+        procurement: [], consumables: [],
         budget: ['Vehicle / acquisition','Body / paint','Powertrain','Chassis / brakes / wheels','Electrical','Interior / glass / trim','Compliance / testing','Contingency'].map(category=>row({category,budget:'',committed:'',paid:'',forecast:''})),
         worklog: [], issues: [],
         compliance: ['Ownership / registration','Identity / modification approval','Roadworthiness / inspection','Insurance / valuation'].map(requirement=>row({requirement,authority:'',evidence:'',date:'',status:'NOT STARTED'})),
@@ -264,6 +268,7 @@ export function initBuildBinder(): void {
   function ensureProjectShape(project) {
     project.tables=project.tables||{};
     if(!Array.isArray(project.tables.rustRepairs)) project.tables.rustRepairs=[];
+    if(!Array.isArray(project.tables.consumables)) project.tables.consumables=[];
     project.photos=project.photos||{};
     project.photoGalleries=project.photoGalleries||{};
     Object.keys(galleryDefinitions).forEach(key=>{ if(!Array.isArray(project.photoGalleries[key])) project.photoGalleries[key]=[]; });
@@ -359,7 +364,7 @@ export function initBuildBinder(): void {
       planning:(p.tables.actions?.length||0)+(p.tables.decisions?.length||0)+(p.tables.risks?.length||0),
       disassembly:p.tables.inventory?.length||0, body:(p.tables.body?.length||0)+(p.tables.rustRepairs?.length||0), chassis:p.tables.chassis?.length||0,
       powertrain:p.tables.powertrain?.length||0, electrical:p.tables.circuits?.length||0, interior:p.tables.trim?.length||0,
-      commercial:(p.tables.procurement?.length||0)+(p.tables.budget?.length||0), worklog:(p.tables.worklog?.length||0)+(p.tables.issues?.length||0),
+      commercial:(p.tables.procurement?.length||0)+(p.tables.consumables?.length||0)+(p.tables.budget?.length||0), worklog:(p.tables.worklog?.length||0)+(p.tables.issues?.length||0),
       handover:(p.tables.compliance?.length||0)+(p.tables.tests?.length||0), library:p.tables.references?.length||0,
       design:p.tables.refinements?.length||0
     };
@@ -573,6 +578,7 @@ export function initBuildBinder(): void {
       <section class="card span-3 metric cyan"><span class="metric-label">FORECAST</span><strong>${money(t.forecast)}</strong><span class="metric-note">Expected total at completion</span></section>
       ${card('Budget summary',table('budget'),{span:'span-12'})}
       ${card('Procurement register',table('procurement','Procurement','No purchases recorded yet'),{span:'span-12'})}
+      ${card('Consumables register',table('consumables','Consumables','No consumables recorded yet'),{span:'span-12'})}
       ${card('Part acceptance checklist',checklist('acceptance'),{span:'span-12'})}
     </div>`;
   }
@@ -640,7 +646,7 @@ export function initBuildBinder(): void {
   }
 
   function quickAddModal() {
-    openModal('QUICK CAPTURE','Add a project record',`<div class="form-grid"><div class="field"><label>Record type</label><select id="quickType"><option value="actions">Action</option><option value="issues">Issue / defect</option><option value="inventory">Part / inventory item</option><option value="worklog">Work log entry</option><option value="evidence">Evidence item</option><option value="procurement">Purchase / service</option></select></div><div class="field"><label>Short description</label><input id="quickDescription" placeholder="What needs to be recorded?"></div><div class="field"><label>Owner / by</label><input id="quickOwner" placeholder="Optional"></div><div class="field"><label>Date / due</label><input id="quickDate" type="date" value="${today()}"></div></div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="quickAddConfirm">Add record</button>`);
+    openModal('QUICK CAPTURE','Add a project record',`<div class="form-grid"><div class="field"><label>Record type</label><select id="quickType"><option value="actions">Action</option><option value="issues">Issue / defect</option><option value="inventory">Part / inventory item</option><option value="worklog">Work log entry</option><option value="evidence">Evidence item</option><option value="procurement">Purchase / service</option><option value="consumables">Consumable</option></select></div><div class="field"><label>Short description</label><input id="quickDescription" placeholder="What needs to be recorded?"></div><div class="field"><label>Owner / by</label><input id="quickOwner" placeholder="Optional"></div><div class="field"><label>Date / due</label><input id="quickDate" type="date" value="${today()}"></div></div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="quickAddConfirm">Add record</button>`);
   }
 
   function quickAdd() {
@@ -653,6 +659,7 @@ export function initBuildBinder(): void {
     if(type==='worklog') data={...tableSchemas.worklog.blank,date,work:desc,by:owner};
     if(type==='evidence') data={...tableSchemas.evidence.blank,id:`EV-${String((p.tables.evidence?.length||0)+1).padStart(3,'0')}`,item:desc,source:owner};
     if(type==='procurement') data={...tableSchemas.procurement.blank,id:`P-${String((p.tables.procurement?.length||0)+1).padStart(3,'0')}`,item:desc,supplier:owner,ordered:date};
+    if(type==='consumables') data={...tableSchemas.consumables.blank,id:`C-${String((p.tables.consumables?.length||0)+1).padStart(3,'0')}`,item:desc,supplier:owner,ordered:date};
     p.tables[type]=p.tables[type]||[]; p.tables[type].push(row(data)); queueSave('Quick record added'); closeModal(); render();
   }
 
