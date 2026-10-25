@@ -278,6 +278,7 @@ export function initBuildBinder(): void {
   let activeSection = location.hash.replace('#','') || 'dashboard';
   if (!sectionDefs.some(s=>s.id===activeSection)) activeSection='dashboard';
   let saveTimer;
+  const editableChecklists = new Set();
 
   const $ = selector => document.querySelector(selector);
   const app = $('#app');
@@ -417,7 +418,8 @@ export function initBuildBinder(): void {
 
   function checklist(name) {
     const list=activeProject().checklists[name]||[];
-    return `<div class="check-list">${list.map((item,i)=>`<div class="check-item"><input id="${name}-${i}" type="checkbox" data-checklist="${name}" data-index="${i}" ${item.done?'checked':''}><label for="${name}-${i}">${esc(item.label)}</label><small>${item.done?'DONE':'OPEN'}</small></div>`).join('')}</div>`;
+    const editing=editableChecklists.has(name);
+    return `<div class="checklist-toolbar"><button class="button ghost small" data-checklist-edit="${name}">${editing?'Done':'Edit list'}</button></div><div class="check-list">${list.map((item,i)=>`<div class="check-item"><input id="${name}-${i}" type="checkbox" data-checklist="${name}" data-index="${i}" ${item.done?'checked':''}>${editing?`<input class="checklist-label-input" type="text" data-checklist-label="${name}" data-index="${i}" value="${esc(item.label)}" aria-label="Checklist item ${i+1}">`:`<label for="${name}-${i}">${esc(item.label)}</label>`}${editing?`<button class="row-delete" data-checklist-remove="${name}" data-index="${i}" aria-label="Remove checklist item" title="Remove item">×</button>`:`<small>${item.done?'DONE':'OPEN'}</small>`}</div>`).join('')}</div>${editing?`<div class="checklist-add"><input type="text" data-checklist-new="${name}" placeholder="New checklist item…" aria-label="New checklist item"><button class="button ghost small" data-checklist-add="${name}">＋ Add item</button></div>`:''}`;
   }
 
   function photoGallery(galleryKey) {
@@ -676,6 +678,25 @@ export function initBuildBinder(): void {
     if(e.target.closest('#commandButton')) commandModal();
     if(e.target.closest('#menuToggle')) $('#sidebar').classList.toggle('open');
     if(e.target.closest('#modalClose')||e.target.closest('[data-modal-close]')||e.target=== $('#modalBackdrop')) closeModal();
+    const checklistEdit=e.target.closest('[data-checklist-edit]');
+    if(checklistEdit){ const name=checklistEdit.dataset.checklistEdit; editableChecklists.has(name)?editableChecklists.delete(name):editableChecklists.add(name); render(); }
+    const checklistAdd=e.target.closest('[data-checklist-add]');
+    if(checklistAdd){
+      const name=checklistAdd.dataset.checklistAdd;
+      const input=$(`[data-checklist-new="${name}"]`);
+      const label=input.value.trim();
+      if(!label){ toast('Checklist item required','Enter a label before adding an item.'); input.focus(); return; }
+      activeProject().checklists[name].push({label,done:false});
+      queueSave('Checklist item added');
+      render();
+    }
+    const checklistRemove=e.target.closest('[data-checklist-remove]');
+    if(checklistRemove){
+      const name=checklistRemove.dataset.checklistRemove;
+      activeProject().checklists[name].splice(Number(checklistRemove.dataset.index),1);
+      queueSave('Checklist item removed');
+      render();
+    }
     const add=e.target.closest('[data-add-row]'); if(add){ const name=add.dataset.addRow; activeProject().tables[name].push(row(clone(tableSchemas[name].blank))); queueSave('Row added'); render(); }
     const del=e.target.closest('[data-delete-row]'); if(del){ const tr=del.closest('tr'); const name=del.dataset.deleteRow; activeProject().tables[name]=activeProject().tables[name].filter(r=>r._id!==tr.dataset.row); queueSave('Row deleted'); render(); }
     const phase=e.target.closest('[data-phase]'); if(phase){ activeProject().meta.phase=Number(phase.dataset.phase); queueSave('Build phase updated'); render(); }
@@ -717,6 +738,11 @@ export function initBuildBinder(): void {
       const gallery=e.target.dataset.galleryCaption;
       const photo=activeProject().photoGalleries[gallery]?.find(item=>item.id===e.target.dataset.photoId);
       if(photo){ photo.caption=e.target.value; queueSave('Photo caption updated'); }
+    }
+    if(e.target.matches('[data-checklist-label]')){
+      const checklist=activeProject().checklists[e.target.dataset.checklistLabel];
+      const item=checklist?.[Number(e.target.dataset.index)];
+      if(item){ item.label=e.target.value; queueSave('Checklist item updated'); }
     }
     if(e.target.id==='commandSearch'){
       const q=e.target.value.toLowerCase(); document.querySelectorAll('[data-command-section]').forEach(x=>x.hidden=!x.textContent.toLowerCase().includes(q));
