@@ -62,8 +62,8 @@ export function initBuildBinder(): void {
       blank: { date:'', event:'', source:'', status:'TO VERIFY' }
     },
     condition: {
-      columns: [['area','Area','text'],['condition','Observed condition','text'],['priority','Priority','priority'],['evidence','Evidence ID','text']],
-      blank: { area:'', condition:'', priority:'MEDIUM', evidence:'' }
+      columns: [['area','Area','text'],['condition','Condition summary','text'],['priority','Priority','priority'],['photoEvidence','Evidence photo','conditionphotos']],
+      blank: { area:'', condition:'', priority:'MEDIUM', evidence:'', photoEvidence:'' }
     },
     decisions: {
       columns: [['id','Decision ID','text'],['decision','Decision / options','text'],['chosen','Direction & reason','text'],['date','Date','date'],['status','Status','status']],
@@ -431,6 +431,12 @@ export function initBuildBinder(): void {
     const headers=schema.columns.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th aria-label="Row actions"></th>';
     const body=rows.map(r=>`<tr data-row="${r._id}">${schema.columns.map(([key,label,type])=>{
       const value=r[key]??'';
+      if(type==='conditionphotos'){
+        const linkedPhotos=(p.photoGalleries?.baseline||[]).filter(photo=>photo.conditionIds?.includes(r._id));
+        const links=linkedPhotos.map(photo=>`<a class="condition-photo-link" href="#photo-${esc(photo.id)}" data-photo-link="${esc(photo.id)}">${esc(photo.caption||photo.name||'View photo')}</a>`).join('');
+        const legacyEvidence=r.evidence?`<small class="legacy-evidence">${esc(r.evidence)}</small>`:'';
+        return `<td class="condition-photo-cell">${links||'<span class="muted">No linked photos</span>'}${legacyEvidence}</td>`;
+      }
       if (['status','priority','risk','taskstatus','procurementstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
       if (type==='text') return `<td><textarea class="auto-grow auto-grow-compact" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="1" placeholder="Enter…">${esc(value)}</textarea></td>`;
       return `<td><input aria-label="${esc(label)}" data-table="${name}" data-key="${key}" type="${type}" value="${esc(value)}" placeholder="Enter…" ${type==='number'?'step="0.01"':''}></td>`;
@@ -448,9 +454,10 @@ export function initBuildBinder(): void {
     const p=activeProject();
     const photos=p.photoGalleries?.[galleryKey]||[];
     const suggestions=galleryDefinitions[galleryKey]||[];
-    const cards=photos.map((photo,index)=>`<figure class="gallery-photo" data-gallery-photo="${photo.id}">
+    const cards=photos.map((photo,index)=>`<figure class="gallery-photo" id="photo-${esc(photo.id)}" data-gallery-photo="${esc(photo.id)}">
       <div class="gallery-photo-image"><img src="${photo.dataUrl}" alt="${esc(photo.caption||photo.name||`Project photo ${index+1}`)}"></div>
       <figcaption><input type="text" data-gallery-caption="${galleryKey}" data-photo-id="${photo.id}" value="${esc(photo.caption||'')}" placeholder="Add a caption…" aria-label="Photo caption"></figcaption>
+      ${galleryKey==='baseline'?`<label class="photo-condition-link">Link to condition summary<select multiple data-photo-conditions data-photo-id="${esc(photo.id)}" aria-label="Link photo to condition summaries">${(p.tables.condition||[]).map(condition=>`<option value="${esc(condition._id)}" ${photo.conditionIds?.includes(condition._id)?'selected':''}>${esc([condition.area,condition.condition].filter(Boolean).join(' — ')||'Unspecified condition')}</option>`).join('')}</select></label>`:''}
       <div class="gallery-photo-actions">
         <label for="replace-${photo.id}">Replace</label><input hidden id="replace-${photo.id}" type="file" accept="image/png,image/jpeg,image/webp" data-gallery-replace="${galleryKey}" data-photo-id="${photo.id}">
         <button type="button" data-gallery-remove="${galleryKey}" data-photo-id="${photo.id}">Remove</button>
@@ -725,6 +732,11 @@ export function initBuildBinder(): void {
   }
 
   document.addEventListener('click', async e=>{
+    const photoLink=e.target.closest('[data-photo-link]');
+    if(photoLink){
+      e.preventDefault();
+      document.getElementById(`photo-${photoLink.dataset.photoLink}`)?.scrollIntoView({behavior:'smooth',block:'center'});
+    }
     const section=e.target.closest('[data-section]'); if(section){ activeSection=section.dataset.section; location.hash=activeSection; $('#sidebar').classList.remove('open'); render(); }
     if(e.target.closest('[data-action="quick-add"]')||e.target.closest('#quickAddButton')) quickAddModal();
     if(e.target.closest('[data-action="print"]')||e.target.closest('#printButton')) window.print();
@@ -826,7 +838,11 @@ export function initBuildBinder(): void {
     if(e.target.matches('[data-gallery-caption]')){
       const gallery=e.target.dataset.galleryCaption;
       const photo=activeProject().photoGalleries[gallery]?.find(item=>item.id===e.target.dataset.photoId);
-      if(photo){ photo.caption=e.target.value; queueSave('Photo caption updated'); }
+      if(photo){
+        photo.caption=e.target.value;
+        queueSave('Photo caption updated');
+        app.querySelectorAll(`[data-photo-link="${photo.id}"]`).forEach(link=>link.textContent=photo.caption||photo.name||'View photo');
+      }
     }
     if(e.target.matches('[data-checklist-label]')){
       const checklist=activeProject().checklists[e.target.dataset.checklistLabel];
@@ -840,6 +856,14 @@ export function initBuildBinder(): void {
 
   document.addEventListener('change', async e=>{
     if(e.target.matches('[data-checklist]')){ const x=activeProject().checklists[e.target.dataset.checklist][Number(e.target.dataset.index)]; x.done=e.target.checked; queueSave('Checklist updated'); render(true); }
+    if(e.target.matches('[data-photo-conditions]')){
+      const photo=activeProject().photoGalleries.baseline.find(item=>item.id===e.target.dataset.photoId);
+      if(photo){
+        photo.conditionIds=[...e.target.selectedOptions].map(option=>option.value);
+        queueSave('Photo condition links updated');
+        render(true);
+      }
+    }
     if(e.target===projectSelect){ state.activeProjectId=e.target.value; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); render(); toast('Project switched',activeProject().meta.name); }
     if(e.target.id==='importFile' && e.target.files[0]) importJson(e.target.files[0]);
     if(e.target.matches('[data-gallery-add]') && e.target.files.length){
@@ -849,6 +873,7 @@ export function initBuildBinder(): void {
       for(const file of files){
         try {
           const photo=await compressPhoto(file);
+          if(gallery==='baseline') photo.conditionIds=[];
           activeProject().photoGalleries[gallery].push(photo);
           if(!persistStateNow('',false)) { activeProject().photoGalleries[gallery].pop(); break; }
           saved++;
@@ -867,6 +892,7 @@ export function initBuildBinder(): void {
           const replacement=await compressPhoto(e.target.files[0]);
           replacement.id=original.id;
           replacement.caption=original.caption;
+          replacement.conditionIds=original.conditionIds;
           activeProject().photoGalleries[gallery][index]=replacement;
           if(!persistStateNow('',false)) activeProject().photoGalleries[gallery][index]=original;
           else toast('Photo replaced','The replacement was saved locally.');
