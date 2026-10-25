@@ -512,7 +512,7 @@ export function initBuildBinder(): void {
           const done=(i<3&&i<currentPhase)||(i===3&&systemsComplete)||(i>3&&i<currentPhase);
           const active=i===currentPhase&&!done;
           const locked=i>3&&!systemsComplete;
-          return `<button class="phase ${done?'done':''} ${active?'active':''}" data-phase="${i}" ${locked?'disabled':''}><span>0${i+1}${done?'<small>DONE</small>':''}</span><strong>${name}</strong></button>`;
+          return `<button class="phase ${i===3?'system-parent':''} ${done?'done':''} ${active?'active':''}" data-phase="${i}" ${locked?'disabled':''}><span>0${i+1}${done?'<small>DONE</small>':''}</span><strong>${name}</strong></button>`;
         }).join('')}</div>
         <div class="system-phase-track" aria-label="Systems rebuild work areas">${systemPhases.map(([id,name],i)=>{
           const done=p.meta.systemPhases?.[id]===true;
