@@ -629,10 +629,11 @@ export function initBuildBinder(): void {
     root.querySelectorAll('textarea').forEach(autoGrowTextarea);
   }
 
-  function render() {
+  function render(preserveScroll=false) {
+    const scrollTop=window.scrollY;
     updateProjectChrome(); renderNav();
     app.innerHTML=(renderers[activeSection]||dashboard)();
-    window.scrollTo({top:0,behavior:'instant'});
+    window.scrollTo({top:preserveScroll?scrollTop:0,behavior:'instant'});
     $('#workspace').focus({preventScroll:true});
     requestAnimationFrame(()=>initialiseAutoGrow(app));
   }
@@ -828,7 +829,7 @@ export function initBuildBinder(): void {
   });
 
   document.addEventListener('change', async e=>{
-    if(e.target.matches('[data-checklist]')){ const x=activeProject().checklists[e.target.dataset.checklist][Number(e.target.dataset.index)]; x.done=e.target.checked; queueSave('Checklist updated'); render(); }
+    if(e.target.matches('[data-checklist]')){ const x=activeProject().checklists[e.target.dataset.checklist][Number(e.target.dataset.index)]; x.done=e.target.checked; queueSave('Checklist updated'); render(true); }
     if(e.target===projectSelect){ state.activeProjectId=e.target.value; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); render(); toast('Project switched',activeProject().meta.name); }
     if(e.target.id==='importFile' && e.target.files[0]) importJson(e.target.files[0]);
     if(e.target.matches('[data-gallery-add]') && e.target.files.length){
