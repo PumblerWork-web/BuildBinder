@@ -476,6 +476,7 @@ export function initBuildBinder(): void {
       .reduce((sum,item)=>sum+(Number(item.cost)||0),0);
     const laborCosts=(p.tables.worklog||[])
       .reduce((sum,item)=>sum+(Number(item.hours)||0)*(Number(item.hourlyRate)||0),0);
+    totals.labor=laborCosts;
     totals.paid+=completedCosts+laborCosts;
     totals.forecast+=completedCosts+laborCosts;
     return totals;
@@ -594,8 +595,9 @@ export function initBuildBinder(): void {
   }
 
   function worklog() {
+    const t=totals();
     return header('12','Work, issues & milestones','Create a chronological record that explains what changed, why and how it was verified.')+
-    `<div class="section-grid">${card('Work log',table('worklog','Work log','No work entries recorded yet'),{span:'span-12'})}${card('Issue / defect / change log',table('issues','Issues','No issues recorded'),{span:'span-12'})}${card('Milestone photographs',photoGallery('milestones'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Close-out standard</strong>An issue is closed only when the completed action and verification evidence are recorded—not merely when work starts.</div></div>`;
+    `<div class="section-grid">${card('Work log',table('worklog','Work log','No work entries recorded yet'),{span:'span-12',meta:`<span data-labor-total>LABOUR TOTAL ${money(t.labor)}</span>`})}${card('Issue / defect / change log',table('issues','Issues','No issues recorded'),{span:'span-12'})}${card('Milestone photographs',photoGallery('milestones'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Close-out standard</strong>An issue is closed only when the completed action and verification evidence are recorded—not merely when work starts.</div></div>`;
   }
 
   function handover() {
@@ -795,6 +797,10 @@ export function initBuildBinder(): void {
     }
     if(e.target.matches('[data-table]')){
       const rowEl=e.target.closest('tr'); const table=e.target.dataset.table; const r=activeProject().tables[table].find(x=>x._id===rowEl.dataset.row); if(r){r[e.target.dataset.key]=e.target.value;queueSave('Register updated');}
+      if(table==='worklog'){
+        const total=app.querySelector('.card-header [data-labor-total]');
+        if(total) total.textContent=`LABOUR TOTAL ${money(totals().labor)}`;
+      }
     }
     if(e.target.matches('[data-gallery-caption]')){
       const gallery=e.target.dataset.galleryCaption;
