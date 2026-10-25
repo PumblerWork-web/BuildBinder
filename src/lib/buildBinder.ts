@@ -43,7 +43,7 @@ export function initBuildBinder(): void {
     { id: 'electrical', index: '09', label: 'Electrical & controls', group: 'BUILD SYSTEMS' },
     { id: 'interior', index: '10', label: 'Interior, trim & glass', group: 'BUILD SYSTEMS' },
     { id: 'commercial', index: '11', label: 'Procurement & budget', group: 'DELIVERY' },
-    { id: 'worklog', index: '12', label: 'Work, issues & media', group: 'DELIVERY' },
+    { id: 'worklog', index: '12', label: 'Work, issues & milestones', group: 'DELIVERY' },
     { id: 'handover', index: '13', label: 'Compliance & handover', group: 'DELIVERY' },
     { id: 'library', index: '14', label: 'Reference library', group: 'DELIVERY' },
     { id: 'design', index: 'DL', label: 'Binder design lab', group: 'REFINE THE BINDER' }
@@ -114,8 +114,8 @@ export function initBuildBinder(): void {
       blank: { category:'', budget:'', committed:'', paid:'', forecast:'' }
     },
     worklog: {
-      columns: [['date','Date','date'],['hours','Hours','number'],['area','Area','text'],['work','Work completed','text'],['evidence','Parts / evidence','text'],['by','By','text']],
-      blank: { date:'', hours:'', area:'', work:'', evidence:'', by:'' }
+      columns: [['date','Date','date'],['hours','Hours','number'],['hourlyRate','Cost per hour','number'],['area','Area','text'],['work','Work completed','text'],['evidence','Parts / evidence','text'],['by','By','text']],
+      blank: { date:'', hours:'', hourlyRate:'', area:'', work:'', evidence:'', by:'' }
     },
     issues: {
       columns: [['id','Issue ID','text'],['issue','Issue / change','text'],['impact','Impact','text'],['action','Action / decision','text'],['owner','Owner','text'],['status','Status','taskstatus']],
@@ -474,8 +474,10 @@ export function initBuildBinder(): void {
       .flatMap(key=>p.tables[key]||[])
       .filter(item=>item.status==='COMPLETE')
       .reduce((sum,item)=>sum+(Number(item.cost)||0),0);
-    totals.paid+=completedCosts;
-    totals.forecast+=completedCosts;
+    const laborCosts=(p.tables.worklog||[])
+      .reduce((sum,item)=>sum+(Number(item.hours)||0)*(Number(item.hourlyRate)||0),0);
+    totals.paid+=completedCosts+laborCosts;
+    totals.forecast+=completedCosts+laborCosts;
     return totals;
   }
 
@@ -592,7 +594,7 @@ export function initBuildBinder(): void {
   }
 
   function worklog() {
-    return header('12','Work, issues & media','Create a chronological record that explains what changed, why and how it was verified.')+
+    return header('12','Work, issues & milestones','Create a chronological record that explains what changed, why and how it was verified.')+
     `<div class="section-grid">${card('Work log',table('worklog','Work log','No work entries recorded yet'),{span:'span-12'})}${card('Issue / defect / change log',table('issues','Issues','No issues recorded'),{span:'span-12'})}${card('Milestone photographs',photoGallery('milestones'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Close-out standard</strong>An issue is closed only when the completed action and verification evidence are recorded—not merely when work starts.</div></div>`;
   }
 
