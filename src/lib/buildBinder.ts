@@ -107,6 +107,10 @@ export function initBuildBinder(): void {
       columns: [['part','Part / component','text'],['specification','Specification / rating','text'],['quantity','Qty','number'],['supplierLink','Supplier / link','text'],['photoId','Photos','electricalpartphoto']],
       blank: { part:'', specification:'', quantity:'', supplierLink:'', photoId:'' }
     },
+    chassisParts: {
+      columns: [['part','Part / component','text'],['specification','Specification','text'],['quantity','Qty','number'],['supplierLink','Supplier / link','text'],['status','Status','taskstatus']],
+      blank: { part:'', specification:'', quantity:'', supplierLink:'', status:'NOT STARTED' }
+    },
     trim: {
       columns: [['area','Area','text'],['existing','Existing / evidence','text'],['target','Target / material','text'],['supplier','Supplier / craftsperson','text'],['status','Status','taskstatus']],
       blank: { area:'', existing:'', target:'', supplier:'', status:'NOT STARTED' }
@@ -245,6 +249,7 @@ export function initBuildBinder(): void {
         body: ['Front structure / panels','Cabin / floor / sills','Rear structure / quarters','Doors / hinges / gaps','Boot / bonnet / closures','Underbody / mounts'].map(area=>row({area,condition:'',strategy:'',specialist:'',status:'NOT STARTED'})),
         rustRepairs: [],
         chassis: ['Front suspension','Rear suspension','Steering','Brakes','Wheels / tyres','Bearings / hubs'].map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'})),
+        chassisParts: [],
         powertrain: ['Engine','Transmission','Differential / axle','Fuel','Cooling','Induction','Exhaust','Lubrication'].map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'})),
         circuits: ['Starting / charging','Ignition / engine','Lighting','Instruments','Accessories','Added circuits'].map(circuit=>row({circuit,supply:'',route:'',earth:'',test:'',status:'NOT STARTED'})),
         electricalParts: [],
@@ -318,6 +323,7 @@ export function initBuildBinder(): void {
     if(!Array.isArray(project.tables.consumables)) project.tables.consumables=[];
     if(!Array.isArray(project.tables.specialistRepairs)) project.tables.specialistRepairs=[];
     if(!Array.isArray(project.tables.electricalParts)) project.tables.electricalParts=[];
+    if(!Array.isArray(project.tables.chassisParts)) project.tables.chassisParts=[];
     if(!Array.isArray(project.tables.disassemblyLog)) project.tables.disassemblyLog=[];
     project.photos=project.photos||{};
     project.photoGalleries=project.photoGalleries||{};
@@ -417,8 +423,9 @@ export function initBuildBinder(): void {
     const map={
       identity:(p.tables.evidence?.length||0)+(p.tables.history?.length||0), baseline:p.tables.condition?.length||0,
       planning:(p.tables.actions?.length||0)+(p.tables.decisions?.length||0)+(p.tables.risks?.length||0),
-      disassembly:p.tables.inventory?.length||0, body:(p.tables.body?.length||0)+(p.tables.rustRepairs?.length||0), chassis:p.tables.chassis?.length||0,
-      powertrain:p.tables.powertrain?.length||0, electrical:p.tables.circuits?.length||0, interior:p.tables.trim?.length||0,
+      disassembly:p.tables.inventory?.length||0, body:(p.tables.body?.length||0)+(p.tables.rustRepairs?.length||0),
+      chassis:(p.tables.chassis?.length||0)+(p.tables.chassisParts?.length||0), powertrain:p.tables.powertrain?.length||0,
+      electrical:p.tables.circuits?.length||0, interior:p.tables.trim?.length||0,
       commercial:(p.tables.parts?.length||0)+(p.tables.specialistRepairs?.length||0)+(p.tables.consumables?.length||0)+(p.tables.budget?.length||0), worklog:(p.tables.worklog?.length||0)+(p.tables.issues?.length||0),
       handover:(p.tables.compliance?.length||0)+(p.tables.tests?.length||0), library:p.tables.references?.length||0,
       design:p.tables.refinements?.length||0
@@ -650,7 +657,7 @@ export function initBuildBinder(): void {
 
   function chassis() {
     return header('07','Chassis, Brakes & Wheels','Control safety-critical components with measurements, sources and verification.')+
-    `<div class="section-grid">${card('System build record',table('chassis'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Safety record</strong>Torque values and procedures must come from an identified authoritative source or qualified specialist. Record the source in the reference library.</div></div>`;
+    `<div class="section-grid">${card('System build record',table('chassis'),{span:'span-12'})}${card('Chassis parts',table('chassisParts','Chassis parts','No chassis parts recorded yet'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Safety record</strong>Torque values and procedures must come from an identified authoritative source or qualified specialist. Record the source in the reference library.</div></div>`;
   }
 
   function powertrain() {
