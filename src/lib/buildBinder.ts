@@ -42,7 +42,7 @@ export function initBuildBinder(): void {
     { id: 'powertrain', index: '08', label: 'Powertrain & support', group: 'BUILD SYSTEMS' },
     { id: 'electrical', index: '09', label: 'Electrical & controls', group: 'BUILD SYSTEMS' },
     { id: 'interior', index: '10', label: 'Interior, trim & glass', group: 'BUILD SYSTEMS' },
-    { id: 'commercial', index: '11', label: 'Procurement & budget', group: 'DELIVERY' },
+    { id: 'commercial', index: '11', label: 'Parts & budget', group: 'DELIVERY' },
     { id: 'worklog', index: '12', label: 'Work, issues & milestones', group: 'DELIVERY' },
     { id: 'handover', index: '13', label: 'Compliance & handover', group: 'DELIVERY' },
     { id: 'library', index: '14', label: 'Reference library', group: 'DELIVERY' },
@@ -625,7 +625,7 @@ export function initBuildBinder(): void {
   function commercial() {
     const p=activeProject();
     const t=totals();
-    return header('11','Procurement & budget','Connect every purchase to scope, provenance, fit and financial control.')+
+    return header('11','Parts & budget','Connect every purchase to scope, provenance, fit and financial control.')+
     `<div class="dashboard-grid">
       ${costTrackingEnabled(p)?`
       <section class="card span-3 metric"><span class="metric-label">APPROVED BUDGET</span><strong>${money(t.budget)}</strong><span class="metric-note">Current category total</span></section>
