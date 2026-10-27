@@ -111,16 +111,16 @@ export function initBuildBinder(): void {
       columns: [['area','Area','text'],['existing','Existing / evidence','text'],['target','Target / material','text'],['supplier','Supplier / craftsperson','text'],['status','Status','taskstatus']],
       blank: { area:'', existing:'', target:'', supplier:'', status:'NOT STARTED' }
     },
-    Parts: {
-      columns: [['id','PO / ID','text'],['item','Parts','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','procurementstatus']],
+    parts: {
+      columns: [['id','PO / ID','text'],['item','Parts','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','partsstatus']],
       blank: { id:'P-', item:'', supplier:'', ordered:'', cost:'', status:'NOT STARTED' }
     },
     specialistRepairs: {
-      columns: [['id','PO / ID','text'],['item','Service','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','procurementstatus']],
+      columns: [['id','PO / ID','text'],['item','Service','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','partsstatus']],
       blank: { id:'SR-', item:'', supplier:'', ordered:'', cost:'', status:'NOT STARTED' }
     },
     consumables: {
-      columns: [['id','PO / ID','text'],['item','Item','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','procurementstatus']],
+      columns: [['id','PO / ID','text'],['item','Item','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','partsstatus']],
       blank: { id:'C-', item:'', supplier:'', ordered:'', cost:'', status:'NOT STARTED' }
     },
     budget: {
@@ -249,7 +249,7 @@ export function initBuildBinder(): void {
         circuits: ['Starting / charging','Ignition / engine','Lighting','Instruments','Accessories','Added circuits'].map(circuit=>row({circuit,supply:'',route:'',earth:'',test:'',status:'NOT STARTED'})),
         electricalParts: [],
         trim: ['Seats / upholstery','Carpet / insulation','Dashboard / instruments','Door / quarter trims','Headlining / roof trim','Brightwork / hardware','Glass / seals'].map(area=>row({area,existing:'',target:'',supplier:'',status:'NOT STARTED'})),
-        procurement: [], specialistRepairs: [], consumables: [],
+        parts: [], specialistRepairs: [], consumables: [],
         budget: ['Vehicle / acquisition','Body / paint','Powertrain','Chassis / brakes / wheels','Electrical','Interior / glass / trim','Compliance / testing','Contingency'].map(category=>row({category,budget:'',committed:'',paid:'',forecast:''})),
         worklog: [], issues: [],
         compliance: ['Ownership / registration','Identity / modification approval','Roadworthiness / inspection','Insurance / valuation'].map(requirement=>row({requirement,authority:'',evidence:'',date:'',status:'NOT STARTED'})),
@@ -313,6 +313,7 @@ export function initBuildBinder(): void {
 
   function ensureProjectShape(project) {
     project.tables=project.tables||{};
+    if(!Array.isArray(project.tables.parts)) project.tables.parts=[];
     if(!Array.isArray(project.tables.rustRepairs)) project.tables.rustRepairs=[];
     if(!Array.isArray(project.tables.consumables)) project.tables.consumables=[];
     if(!Array.isArray(project.tables.specialistRepairs)) project.tables.specialistRepairs=[];
@@ -418,7 +419,7 @@ export function initBuildBinder(): void {
       planning:(p.tables.actions?.length||0)+(p.tables.decisions?.length||0)+(p.tables.risks?.length||0),
       disassembly:p.tables.inventory?.length||0, body:(p.tables.body?.length||0)+(p.tables.rustRepairs?.length||0), chassis:p.tables.chassis?.length||0,
       powertrain:p.tables.powertrain?.length||0, electrical:p.tables.circuits?.length||0, interior:p.tables.trim?.length||0,
-      commercial:(p.tables.procurement?.length||0)+(p.tables.specialistRepairs?.length||0)+(p.tables.consumables?.length||0)+(p.tables.budget?.length||0), worklog:(p.tables.worklog?.length||0)+(p.tables.issues?.length||0),
+      commercial:(p.tables.parts?.length||0)+(p.tables.specialistRepairs?.length||0)+(p.tables.consumables?.length||0)+(p.tables.budget?.length||0), worklog:(p.tables.worklog?.length||0)+(p.tables.issues?.length||0),
       handover:(p.tables.compliance?.length||0)+(p.tables.tests?.length||0), library:p.tables.references?.length||0,
       design:p.tables.refinements?.length||0
     };
@@ -475,7 +476,7 @@ export function initBuildBinder(): void {
     const choices={
       status:['DRAFT','TO VERIFY','VERIFIED','SUPERSEDED'], priority:['LOW','MEDIUM','HIGH','CRITICAL'], risk:['LOW','MEDIUM','HIGH'],
       taskstatus:['NOT STARTED','IN PROGRESS','BLOCKED','OPEN','COMPLETE','CLOSED'],
-      procurementstatus:['NOT STARTED','NEEDED','ORDERED','IN STOCK','COMPLETE'], disposition:['RETAIN','REPAIR','REPLACE','MISSING','SURPLUS']
+      partsstatus:['NOT STARTED','NEEDED','ORDERED','IN STOCK','COMPLETE'], disposition:['RETAIN','REPAIR','REPLACE','MISSING','SURPLUS']
     }[type] || [];
     return choices.map(o=>`<option value="${o}" ${value===o?'selected':''}>${o}</option>`).join('');
   }
@@ -507,7 +508,7 @@ export function initBuildBinder(): void {
         const photos=p.photoGalleries?.disassembly||[];
         return `<td><select data-disassembly-photo-link aria-label="Photo for ${esc(r.part||r.location||'disassembly record')}" ${photos.length?'':'disabled'}><option value="">${photos.length?'No photo linked':'Add a disassembly photo below'}</option>${photos.map(photo=>`<option value="${esc(photo.id)}" ${value===photo.id?'selected':''}>${esc(photo.caption||photo.name||'Untitled photo')}</option>`).join('')}</select></td>`;
       }
-      if (['status','priority','risk','taskstatus','procurementstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
+      if (['status','priority','risk','taskstatus','partsstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
       if (type==='text') return `<td><textarea class="auto-grow auto-grow-compact" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="1" placeholder="Enter…">${esc(value)}</textarea></td>`;
       if (type==='textarea') return `<td><textarea class="auto-grow" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="2" placeholder="Enter…">${esc(value)}</textarea></td>`;
       return `<td><input aria-label="${esc(label)}" data-table="${name}" data-key="${key}" type="${type}" value="${esc(value)}" placeholder="Enter…" ${type==='number'?'step="0.01"':''}></td>`;
@@ -549,7 +550,7 @@ export function initBuildBinder(): void {
     if(!costTrackingEnabled(p)) return {budget:0,committed:0,paid:0,forecast:0,labor:0};
     const b=p.tables.budget||[];
     const totals=['budget','committed','paid','forecast'].reduce((acc,key)=>{acc[key]=b.reduce((s,r)=>s+(Number(r[key])||0),0);return acc;},{});
-    const completedCosts=['procurement','specialistRepairs','consumables']
+    const completedCosts=['parts','specialistRepairs','consumables']
       .flatMap(key=>p.tables[key]||[])
       .filter(item=>item.status==='COMPLETE')
       .reduce((sum,item)=>sum+(Number(item.cost)||0),0);
@@ -767,7 +768,7 @@ export function initBuildBinder(): void {
   }
 
   function quickAddModal() {
-    openModal('QUICK CAPTURE','Add a project record',`<div class="form-grid"><div class="field"><label>Record type</label><select id="quickType"><option value="actions">Action</option><option value="issues">Issue / defect</option><option value="inventory">Part / inventory item</option><option value="worklog">Work log entry</option><option value="evidence">Evidence item</option><option value="procurement">Part</option><option value="specialistRepairs">Specialist repair</option><option value="consumables">Consumable</option></select></div><div class="field"><label>Short description</label><input id="quickDescription" placeholder="What needs to be recorded?"></div><div class="field"><label>Owner / by</label><input id="quickOwner" placeholder="Optional"></div><div class="field"><label>Date / due</label><input id="quickDate" type="date" value="${today()}"></div></div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="quickAddConfirm">Add record</button>`);
+    openModal('QUICK CAPTURE','Add a project record',`<div class="form-grid"><div class="field"><label>Record type</label><select id="quickType"><option value="actions">Action</option><option value="issues">Issue / defect</option><option value="inventory">Part / inventory item</option><option value="worklog">Work log entry</option><option value="evidence">Evidence item</option><option value="parts">Part</option><option value="specialistRepairs">Specialist repair</option><option value="consumables">Consumable</option></select></div><div class="field"><label>Short description</label><input id="quickDescription" placeholder="What needs to be recorded?"></div><div class="field"><label>Owner / by</label><input id="quickOwner" placeholder="Optional"></div><div class="field"><label>Date / due</label><input id="quickDate" type="date" value="${today()}"></div></div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="quickAddConfirm">Add record</button>`);
   }
 
   function quickAdd() {
@@ -779,7 +780,7 @@ export function initBuildBinder(): void {
     if(type==='inventory') data={...tableSchemas.inventory.blank,tag:`${p.fields.tagPrefix||'PART'}-${String((p.tables.inventory?.length||0)+1).padStart(3,'0')}`,part:desc};
     if(type==='worklog') data={...tableSchemas.worklog.blank,date,work:desc,by:owner};
     if(type==='evidence') data={...tableSchemas.evidence.blank,id:`EV-${String((p.tables.evidence?.length||0)+1).padStart(3,'0')}`,item:desc,source:owner};
-    if(type==='procurement') data={...tableSchemas.procurement.blank,id:`P-${String((p.tables.procurement?.length||0)+1).padStart(3,'0')}`,item:desc,supplier:owner,ordered:date};
+    if(type==='parts') data={...tableSchemas.parts.blank,id:`P-${String((p.tables.parts?.length||0)+1).padStart(3,'0')}`,item:desc,supplier:owner,ordered:date};
     if(type==='specialistRepairs') data={...tableSchemas.specialistRepairs.blank,id:`SR-${String((p.tables.specialistRepairs?.length||0)+1).padStart(3,'0')}`,item:desc,supplier:owner,ordered:date};
     if(type==='consumables') data={...tableSchemas.consumables.blank,id:`C-${String((p.tables.consumables?.length||0)+1).padStart(3,'0')}`,item:desc,supplier:owner,ordered:date};
     p.tables[type]=p.tables[type]||[]; p.tables[type].push(row(data)); queueSave('Quick record added'); closeModal(); render();
