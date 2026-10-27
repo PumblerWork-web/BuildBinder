@@ -479,7 +479,11 @@ export function initBuildBinder(): void {
       }
       if(type==='electricalpartphoto'){
         const photos=p.photoGalleries?.electrical||[];
-        return `<td><select data-electrical-photo-link aria-label="Photo for ${esc(r.part||'electrical part')}" ${photos.length?'':'disabled'}><option value="">${photos.length?'No photo linked':'Add an electrical photo below'}</option>${photos.map(photo=>`<option value="${esc(photo.id)}" ${value===photo.id?'selected':''}>${esc(photo.caption||photo.name||'Untitled photo')}</option>`).join('')}</select></td>`;
+        const linkedPhoto=photos.find(photo=>photo.id===value);
+        const photoButton=linkedPhoto
+          ?`<button class="electrical-part-photo" type="button" data-photo-preview="electrical" data-photo-id="${esc(linkedPhoto.id)}" aria-label="Open photo ${esc(linkedPhoto.caption||linkedPhoto.name||'electrical part')}"><img src="${linkedPhoto.dataUrl}" alt=""><span data-electrical-photo-label data-photo-id="${esc(linkedPhoto.id)}">${esc(linkedPhoto.caption||linkedPhoto.name||'View photo')}</span></button>`
+          :'<span class="electrical-part-photo-empty">No photo linked</span>';
+        return `<td><div class="electrical-part-photo-cell">${photoButton}<button class="electrical-part-photo-picker" type="button" data-electrical-photo-picker="${esc(r._id)}" aria-label="Add or link a photo for ${esc(r.part||'electrical part')}" title="Add or link a photo">▾</button></div></td>`;
       }
       if (['status','priority','risk','taskstatus','procurementstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
       if (type==='text') return `<td><textarea class="auto-grow auto-grow-compact" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="1" placeholder="Enter…">${esc(value)}</textarea></td>`;
@@ -701,6 +705,15 @@ export function initBuildBinder(): void {
     $('#modalBackdrop').hidden=false; document.body.style.overflow='hidden';
     setTimeout(()=>$('#modalContent').querySelector('input,select,textarea,button')?.focus(),20);
   }
+
+  function electricalPhotoPicker(rowId) {
+    const photos=activeProject().photoGalleries.electrical||[];
+    const part=activeProject().tables.electricalParts.find(item=>item._id===rowId);
+    if(!part) return;
+    const choices=photos.map(photo=>`<button class="electrical-photo-choice" type="button" data-electrical-photo-choose="${esc(rowId)}" data-photo-id="${esc(photo.id)}"><img src="${photo.dataUrl}" alt=""><span>${esc(photo.caption||photo.name||'Untitled photo')}</span></button>`).join('');
+    openModal('ELECTRICAL PART','Add or link a photo',`<div class="electrical-photo-picker">${choices||'<p class="photo-gallery-empty">No electrical photos added yet.</p>'}</div>`,`<button class="button ghost" data-modal-close>Cancel</button>${part.photoId?`<button class="button ghost" data-electrical-photo-clear="${esc(rowId)}">Unlink photo</button>`:''}<button class="button primary" data-electrical-photo-add>＋ Add photo</button>`);
+  }
+
   function closeModal() {
     $('#modalBackdrop').hidden=true;
     $('#modal').classList.remove('photo-preview');
@@ -830,6 +843,32 @@ export function initBuildBinder(): void {
         $('#modal').classList.add('photo-preview');
       }
     }
+    const electricalPhotoPickerButton=e.target.closest('[data-electrical-photo-picker]');
+    if(electricalPhotoPickerButton) electricalPhotoPicker(electricalPhotoPickerButton.dataset.electricalPhotoPicker);
+    const electricalPhotoChoice=e.target.closest('[data-electrical-photo-choose]');
+    if(electricalPhotoChoice){
+      const part=activeProject().tables.electricalParts.find(item=>item._id===electricalPhotoChoice.dataset.electricalPhotoChoose);
+      if(part){
+        part.photoId=electricalPhotoChoice.dataset.photoId;
+        queueSave('Electrical part photo linked');
+        closeModal();
+        render();
+      }
+    }
+    const electricalPhotoClear=e.target.closest('[data-electrical-photo-clear]');
+    if(electricalPhotoClear){
+      const part=activeProject().tables.electricalParts.find(item=>item._id===electricalPhotoClear.dataset.electricalPhotoClear);
+      if(part){
+        part.photoId='';
+        queueSave('Electrical part photo unlinked');
+        closeModal();
+        render();
+      }
+    }
+    if(e.target.closest('[data-electrical-photo-add]')){
+      closeModal();
+      $('#add-gallery-electrical').click();
+    }
     const section=e.target.closest('[data-section]'); if(section){ activeSection=section.dataset.section; location.hash=activeSection; $('#sidebar').classList.remove('open'); render(); }
     if(e.target.closest('[data-action="quick-add"]')||e.target.closest('#quickAddButton')) quickAddModal();
     if(e.target.closest('[data-action="print"]')||e.target.closest('#printButton')) window.print();
@@ -940,7 +979,7 @@ export function initBuildBinder(): void {
         photo.caption=e.target.value;
         queueSave('Photo caption updated');
         app.querySelectorAll(`[data-condition-photo-select] option[value="${photo.id}"]`).forEach(option=>option.textContent=photo.caption||photo.name||'Untitled photo');
-        app.querySelectorAll(`[data-electrical-photo-link] option[value="${photo.id}"]`).forEach(option=>option.textContent=photo.caption||photo.name||'Untitled photo');
+        app.querySelectorAll(`[data-electrical-photo-label][data-photo-id="${photo.id}"]`).forEach(label=>label.textContent=photo.caption||photo.name||'View photo');
       }
     }
     if(e.target.matches('[data-checklist-label]')){
@@ -966,15 +1005,6 @@ export function initBuildBinder(): void {
     if(e.target.matches('[data-condition-photo-select]')&&e.target.value){
       document.getElementById(`photo-${e.target.value}`)?.scrollIntoView({behavior:'smooth',block:'center'});
       e.target.value='';
-    }
-    if(e.target.matches('[data-electrical-photo-link]')){
-      const rowEl=e.target.closest('tr');
-      const part=activeProject().tables.electricalParts.find(item=>item._id===rowEl.dataset.row);
-      if(part){
-        part.photoId=e.target.value;
-        queueSave('Electrical part photo link updated');
-        if(part.photoId) document.getElementById(`photo-${part.photoId}`)?.scrollIntoView({behavior:'smooth',block:'center'});
-      }
     }
     if(e.target===projectSelect){ state.activeProjectId=e.target.value; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); render(); toast('Project switched',activeProject().meta.name); }
     if(e.target.id==='importFile' && e.target.files[0]) importJson(e.target.files[0]);
