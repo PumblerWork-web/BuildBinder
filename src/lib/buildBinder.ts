@@ -111,12 +111,12 @@ export function initBuildBinder(): void {
       columns: [['area','Area','text'],['existing','Existing / evidence','text'],['target','Target / material','text'],['supplier','Supplier / craftsperson','text'],['status','Status','taskstatus']],
       blank: { area:'', existing:'', target:'', supplier:'', status:'NOT STARTED' }
     },
-    procurement: {
-      columns: [['id','PO / ID','text'],['item','Part / service','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','procurementstatus']],
+    Parts: {
+      columns: [['id','PO / ID','text'],['item','Parts','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','procurementstatus']],
       blank: { id:'P-', item:'', supplier:'', ordered:'', cost:'', status:'NOT STARTED' }
     },
     specialistRepairs: {
-      columns: [['id','PO / ID','text'],['item','Part / service','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','procurementstatus']],
+      columns: [['id','PO / ID','text'],['item','Service','text'],['supplier','Supplier','text'],['ordered','Ordered','date'],['cost','Cost','number'],['status','Status','procurementstatus']],
       blank: { id:'SR-', item:'', supplier:'', ordered:'', cost:'', status:'NOT STARTED' }
     },
     consumables: {
@@ -475,7 +475,7 @@ export function initBuildBinder(): void {
     const choices={
       status:['DRAFT','TO VERIFY','VERIFIED','SUPERSEDED'], priority:['LOW','MEDIUM','HIGH','CRITICAL'], risk:['LOW','MEDIUM','HIGH'],
       taskstatus:['NOT STARTED','IN PROGRESS','BLOCKED','OPEN','COMPLETE','CLOSED'],
-      procurementstatus:['NOT STARTED','NEEDED','ORDERED','COMPLETE'], disposition:['RETAIN','REPAIR','REPLACE','MISSING','SURPLUS']
+      procurementstatus:['NOT STARTED','NEEDED','ORDERED','IN STOCK','COMPLETE'], disposition:['RETAIN','REPAIR','REPLACE','MISSING','SURPLUS']
     }[type] || [];
     return choices.map(o=>`<option value="${o}" ${value===o?'selected':''}>${o}</option>`).join('');
   }
@@ -678,7 +678,7 @@ export function initBuildBinder(): void {
       <section class="card span-3 metric"><span class="metric-label">PAID</span><strong>${money(t.paid)}</strong><span class="metric-note">Recorded actual spend</span></section>
       <section class="card span-3 metric cyan"><span class="metric-label">FORECAST</span><strong>${money(t.forecast)}</strong><span class="metric-note">Expected total at completion</span></section>
       ${card('Budget summary',table('budget'),{span:'span-12'})}`:`<div class="callout" style="grid-column:span 12"><strong>Cost tracking is off</strong>Cost fields and totals are hidden for this project. You can turn them back on in the Binder design lab.</div>`}
-      ${card('Parts',table('procurement','Parts','No parts recorded yet'),{span:'span-12'})}
+      ${card('Parts',table('parts','Parts','No parts recorded yet'),{span:'span-12'})}
       ${card('Specialist Repairs',table('specialistRepairs','Specialist Repairs','No specialist repairs recorded yet'),{span:'span-12'})}
       ${card('Consumables register',table('consumables','Consumables','No consumables recorded yet'),{span:'span-12'})}
       ${card('Part acceptance checklist',checklist('acceptance'),{span:'span-12'})}
