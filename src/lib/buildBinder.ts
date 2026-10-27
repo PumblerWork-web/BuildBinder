@@ -108,7 +108,7 @@ export function initBuildBinder(): void {
       blank: { part:'', specification:'', quantity:'', supplierLink:'', photoId:'' }
     },
     chassisParts: {
-      columns: [['part','Part / component','text'],['specification','Specification','text'],['quantity','Qty','number'],['supplierLink','Supplier / link','text'],['status','Status','taskstatus']],
+      columns: [['part','Part / component','text'],['specification','Specification','text'],['quantity','Qty','number'],['supplierLink','Supplier / link','text'],['status','Status','partsstatus']],
       blank: { part:'', specification:'', quantity:'', supplierLink:'', status:'NOT STARTED' }
     },
     trim: {
