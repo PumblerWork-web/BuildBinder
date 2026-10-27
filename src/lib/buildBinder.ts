@@ -525,18 +525,18 @@ export function initBuildBinder(): void {
       <figcaption><input type="text" data-gallery-caption="${galleryKey}" data-photo-id="${photo.id}" value="${esc(photo.caption||'')}" placeholder="Add a caption…" aria-label="Photo caption"></figcaption>
       ${galleryKey==='baseline'?`<label class="photo-condition-link">Link to condition summary<select data-photo-conditions data-photo-id="${esc(photo.id)}" aria-label="Link photo to a condition summary"><option value="">Not linked</option>${(p.tables.condition||[]).map(condition=>`<option value="${esc(condition._id)}" ${photo.conditionIds?.includes(condition._id)?'selected':''}>${esc([condition.area,condition.condition].filter(Boolean).join(' — ')||'Unspecified condition')}</option>`).join('')}</select></label>`:''}
       <div class="gallery-photo-actions">
-        <label for="replace-${photo.id}">Replace</label><input hidden id="replace-${photo.id}" type="file" accept="image/png,image/jpeg,image/webp" data-gallery-replace="${galleryKey}" data-photo-id="${photo.id}">
+        <label for="replace-${photo.id}">Replace</label><input hidden id="replace-${photo.id}" type="file" accept="image/*" data-gallery-replace="${galleryKey}" data-photo-id="${photo.id}">
         <button type="button" data-gallery-remove="${galleryKey}" data-photo-id="${photo.id}">Remove</button>
       </div>
     </figure>`).join('');
     return `<div class="photo-gallery" data-gallery="${galleryKey}">
       <div class="photo-gallery-toolbar">
-        <div><strong>${photos.length} ${photos.length===1?'PHOTO':'PHOTOS'}</strong><span>Add images one at a time or select a batch.</span></div>
+        <div><strong>${photos.length} ${photos.length===1?'PHOTO':'PHOTOS'}</strong><span>Browser-supported image types; resized and saved as compressed WebP.</span></div>
         <label class="button primary small" for="add-gallery-${galleryKey}">＋ Add photo</label>
-        <input hidden id="add-gallery-${galleryKey}" type="file" accept="image/png,image/jpeg,image/webp" multiple data-gallery-add="${galleryKey}">
+        <input hidden id="add-gallery-${galleryKey}" type="file" accept="image/*" multiple data-gallery-add="${galleryKey}">
       </div>
       <div class="photo-gallery-suggestions"><b>Suggested coverage:</b> ${suggestions.map(esc).join(' · ')}</div>
-      ${photos.length?`<div class="photo-gallery-grid">${cards}</div>`:`<div class="photo-gallery-empty"><span>＋</span><strong>No photos added yet</strong><p>Use Add Photo to choose PNG, JPG or WebP files. There is no fixed photo count.</p></div>`}
+      ${photos.length?`<div class="photo-gallery-grid">${cards}</div>`:`<div class="photo-gallery-empty"><span>＋</span><strong>No photos added yet</strong><p>Use Add Photo to choose image formats supported by your browser. Images are resized and saved as compressed WebP; animated images are saved as a still image. There is no fixed photo count.</p></div>`}
     </div>`;
   }
 
@@ -797,13 +797,24 @@ export function initBuildBinder(): void {
   }
 
   async function compressPhoto(file) {
-    const allowed=['image/png','image/jpeg','image/webp'];
-    if(!allowed.includes(file.type)) throw new Error(`${file.name}: choose a PNG, JPG or WebP image.`);
+    if(file.type&&!file.type.startsWith('image/')) throw new Error(`${file.name}: choose an image file.`);
     if(file.size>15*1024*1024) throw new Error(`${file.name}: the image is larger than 15 MB.`);
-    const bitmap=await createImageBitmap(file); const max=1400; const scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
-    const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round(bitmap.width*scale)); canvas.height=Math.max(1,Math.round(bitmap.height*scale));
-    const ctx=canvas.getContext('2d'); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high'; ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
-    return { id:uid('photo'), dataUrl:canvas.toDataURL('image/webp',.76), name:file.name, caption:'', type:file.type, width:canvas.width, height:canvas.height, added:new Date().toISOString() };
+    let bitmap;
+    try {
+      bitmap=await createImageBitmap(file);
+    } catch {
+      throw new Error(`${file.name}: this image format is not supported by your browser. Try another image format.`);
+    }
+    try {
+      const max=1400; const scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
+      const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round(bitmap.width*scale)); canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+      const ctx=canvas.getContext('2d');
+      if(!ctx) throw new Error(`${file.name}: the image could not be processed.`);
+      ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high'; ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+      return { id:uid('photo'), dataUrl:canvas.toDataURL('image/webp',.76), name:file.name, caption:'', type:file.type, width:canvas.width, height:canvas.height, added:new Date().toISOString() };
+    } finally {
+      bitmap.close();
+    }
   }
 
   function projectImageCrop(bitmap,zoom,x,y,width,height) {
@@ -834,10 +845,14 @@ export function initBuildBinder(): void {
   }
 
   async function prepareProjectImage(file) {
-    const allowed=['image/png','image/jpeg','image/webp'];
-    if(!allowed.includes(file.type)) throw new Error('Choose a PNG, JPG or WebP image.');
+    if(file.type&&!file.type.startsWith('image/')) throw new Error('Choose an image file.');
     if(file.size>10*1024*1024) throw new Error('The image must be smaller than 10 MB.');
-    const bitmap=await createImageBitmap(file);
+    let bitmap;
+    try {
+      bitmap=await createImageBitmap(file);
+    } catch {
+      throw new Error('This image format is not supported by your browser. Try another image format.');
+    }
     pendingProjectImage={bitmap,name:file.name,type:file.type};
     openModal('PROJECT IMAGE','Crop project image',`<div class="project-image-crop"><div class="project-image-crop-frame"><img id="projectImageCropPreview" alt="Project image crop preview"></div><div class="project-image-crop-controls"><label>Zoom <input id="projectImageZoom" data-crop-control type="range" min="1" max="3" step="0.01" value="1"></label><label>Horizontal position <input id="projectImageX" data-crop-control type="range" min="0" max="100" value="50"></label><label>Vertical position <input id="projectImageY" data-crop-control type="range" min="0" max="100" value="50"></label></div></div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="saveProjectImageCrop">Use cropped image</button>`);
     updateProjectImageCropPreview();

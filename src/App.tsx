@@ -52,7 +52,7 @@ export function App() {
           </div>
           <div className="project-image-controls">
             <label className="project-image-button" htmlFor="projectImageInput" id="projectImageActionLabel">＋ Add image</label>
-            <input id="projectImageInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+            <input id="projectImageInput" type="file" accept="image/*" hidden />
             <button className="project-image-remove" id="projectImageRemove" type="button" hidden>Remove</button>
           </div>
           <strong id="plaqueName">Project vehicle</strong>
