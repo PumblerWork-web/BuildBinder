@@ -97,6 +97,10 @@ export function initBuildBinder(): void {
       columns: [['circuit','Circuit / load','text'],['supply','Supply / fuse','text'],['route','Route / connector','text'],['earth','Earth','text'],['test','Test result','text'],['status','Status','taskstatus']],
       blank: { circuit:'', supply:'', route:'', earth:'', test:'', status:'NOT STARTED' }
     },
+    electricalParts: {
+      columns: [['part','Part / component','text'],['specification','Specification / rating','text'],['quantity','Qty','number'],['supplier','Supplier / source','text'],['status','Status','taskstatus']],
+      blank: { part:'', specification:'', quantity:'', supplier:'', status:'NOT STARTED' }
+    },
     trim: {
       columns: [['area','Area','text'],['existing','Existing / evidence','text'],['target','Target / material','text'],['supplier','Supplier / craftsperson','text'],['status','Status','taskstatus']],
       blank: { area:'', existing:'', target:'', supplier:'', status:'NOT STARTED' }
@@ -232,6 +236,7 @@ export function initBuildBinder(): void {
         chassis: ['Front suspension','Rear suspension','Steering','Brakes','Wheels / tyres','Bearings / hubs'].map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'})),
         powertrain: ['Engine','Transmission','Differential / axle','Fuel','Cooling','Induction','Exhaust','Lubrication'].map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'})),
         circuits: ['Starting / charging','Ignition / engine','Lighting','Instruments','Accessories','Added circuits'].map(circuit=>row({circuit,supply:'',route:'',earth:'',test:'',status:'NOT STARTED'})),
+        electricalParts: [],
         trim: ['Seats / upholstery','Carpet / insulation','Dashboard / instruments','Door / quarter trims','Headlining / roof trim','Brightwork / hardware','Glass / seals'].map(area=>row({area,existing:'',target:'',supplier:'',status:'NOT STARTED'})),
         procurement: [], consumables: [],
         budget: ['Vehicle / acquisition','Body / paint','Powertrain','Chassis / brakes / wheels','Electrical','Interior / glass / trim','Compliance / testing','Contingency'].map(category=>row({category,budget:'',committed:'',paid:'',forecast:''})),
@@ -299,6 +304,7 @@ export function initBuildBinder(): void {
     project.tables=project.tables||{};
     if(!Array.isArray(project.tables.rustRepairs)) project.tables.rustRepairs=[];
     if(!Array.isArray(project.tables.consumables)) project.tables.consumables=[];
+    if(!Array.isArray(project.tables.electricalParts)) project.tables.electricalParts=[];
     project.photos=project.photos||{};
     project.photoGalleries=project.photoGalleries||{};
     Object.keys(galleryDefinitions).forEach(key=>{ if(!Array.isArray(project.photoGalleries[key])) project.photoGalleries[key]=[]; });
@@ -614,7 +620,7 @@ export function initBuildBinder(): void {
 
   function electrical() {
     return header('09','Electrical & controls','Create a serviceable system whose routes, loads, protection and changes are documented.')+
-    `<div class="section-grid">${card('Electrical architecture',`<div class="form-grid three">${field('System voltage','voltage')}${field('Battery location / type','battery')}${field('Main protection','mainProtection')}${field('Earth strategy','earthStrategy')}${field('Harness approach','harness')}${field('Diagram location','diagram')}</div>`,{span:'span-12'})}${card('Circuit register',table('circuits'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Change control</strong>Every non-original circuit should have a purpose, protection rating, route, wire identification, earth point and updated diagram.</div></div>`;
+    `<div class="section-grid">${card('Electrical architecture',`<div class="form-grid three">${field('System voltage','voltage')}${field('Battery location / type','battery')}${field('Main protection','mainProtection')}${field('Earth strategy','earthStrategy')}${field('Harness approach','harness')}${field('Diagram location','diagram')}</div>`,{span:'span-12'})}${card('Circuit register',table('circuits'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Change control</strong>Every non-original circuit should have a purpose, protection rating, route, wire identification, earth point and updated diagram.</div>${card('Electrical parts',table('electricalParts','Electrical parts','No electrical parts recorded yet'),{span:'span-12'})}</div>`;
   }
 
   function interior() {
