@@ -59,6 +59,7 @@ BuildBinder/
 - Command palette (`Ctrl+K` / `Cmd+K`)
 - Responsive desktop, tablet and mobile navigation
 - Density, contrast and accent preferences
+- Per-project cost tracking visibility, including a choice when creating new projects
 - Print preview
 - PWA manifest and runtime offline cache
 - No runtime CDN dependency and no project-data transmission

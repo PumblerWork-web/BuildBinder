@@ -140,6 +140,7 @@ export function initBuildBinder(): void {
   };
   tableSchemas.chassis = tableSchemas.systems;
   tableSchemas.powertrain = tableSchemas.systems;
+  const costFields = new Set(['budget','committed','paid','forecast','cost','hourlyRate']);
 
   const phaseNames = ['Discover / plan','Strip / catalog','Body / structure','Systems rebuild','Finish & assembly','Test & complete'];
   const systemPhases = [
@@ -242,7 +243,7 @@ export function initBuildBinder(): void {
       photos: {},
       photoGalleries: { identity:[], baseline:[], body:[], interior:[], milestones:[] },
       projectImage: null,
-      preferences: { density:'standard', contrast:'standard', accent:'blueprint', printScope:'current' }
+      preferences: { density:'standard', contrast:'standard', accent:'blueprint', printScope:'current', costTracking:true }
     };
   }
 
@@ -309,6 +310,7 @@ export function initBuildBinder(): void {
       project.photoGalleries[gallery].push({ id:uid('photo'), dataUrl, name:legacyKey, caption:label, legacyKey, added:new Date().toISOString() });
     });
     project.preferences=project.preferences||{density:'standard',contrast:'standard',accent:'blueprint',printScope:'current'};
+    if(typeof project.preferences.costTracking!=='boolean') project.preferences.costTracking=true;
     return project;
   }
 
@@ -334,6 +336,7 @@ export function initBuildBinder(): void {
   const nav = $('#mainNav');
 
   function activeProject() { return state.projects.find(p=>p.id===state.activeProjectId) || state.projects[0]; }
+  function costTrackingEnabled(p=activeProject()) { return p.preferences?.costTracking!==false; }
   function persistStateNow(message='',successToast=false) {
     try {
       activeProject().meta.updated=today();
@@ -458,8 +461,9 @@ export function initBuildBinder(): void {
 
   function table(name,title,emptyText='No records yet') {
     const p=activeProject(); const schema=tableSchemas[name]; const rows=p.tables[name]||[];
-    const headers=schema.columns.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th aria-label="Row actions"></th>';
-    const body=rows.map(r=>`<tr data-row="${r._id}">${schema.columns.map(([key,label,type])=>{
+    const columns=schema.columns.filter(([key])=>costTrackingEnabled(p)||!costFields.has(key));
+    const headers=columns.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th aria-label="Row actions"></th>';
+    const body=rows.map(r=>`<tr data-row="${r._id}">${columns.map(([key,label,type])=>{
       const value=r[key]??'';
       if(type==='conditionphotos'){
         const linkedPhotos=(p.photoGalleries?.baseline||[]).filter(photo=>photo.conditionIds?.includes(r._id));
@@ -470,7 +474,7 @@ export function initBuildBinder(): void {
       if (type==='text') return `<td><textarea class="auto-grow auto-grow-compact" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="1" placeholder="Enter…">${esc(value)}</textarea></td>`;
       return `<td><input aria-label="${esc(label)}" data-table="${name}" data-key="${key}" type="${type}" value="${esc(value)}" placeholder="Enter…" ${type==='number'?'step="0.01"':''}></td>`;
     }).join('')}<td><button class="row-delete" data-delete-row="${name}" aria-label="Delete row" title="Delete row">×</button></td></tr>`).join('');
-    return `<div class="table-wrap"><table class="data-table"><thead><tr>${headers}</tr></thead><tbody>${body || `<tr><td colspan="${schema.columns.length+1}"><div class="empty-state"><h3>${esc(emptyText)}</h3><p>Add the first record when it is needed.</p></div></td></tr>`}</tbody></table></div><div class="table-actions"><button class="button ghost small" data-add-row="${name}">＋ Add row</button></div>`;
+    return `<div class="table-wrap"><table class="data-table"><thead><tr>${headers}</tr></thead><tbody>${body || `<tr><td colspan="${columns.length+1}"><div class="empty-state"><h3>${esc(emptyText)}</h3><p>Add the first record when it is needed.</p></div></td></tr>`}</tbody></table></div><div class="table-actions"><button class="button ghost small" data-add-row="${name}">＋ Add row</button></div>`;
   }
 
   function checklist(name) {
@@ -504,6 +508,7 @@ export function initBuildBinder(): void {
   }
 
   function totals(p=activeProject()) {
+    if(!costTrackingEnabled(p)) return {budget:0,committed:0,paid:0,forecast:0,labor:0};
     const b=p.tables.budget||[];
     const totals=['budget','committed','paid','forecast'].reduce((acc,key)=>{acc[key]=b.reduce((s,r)=>s+(Number(r[key])||0),0);return acc;},{});
     const completedCosts=['procurement','consumables']
@@ -539,11 +544,11 @@ export function initBuildBinder(): void {
     const systemsComplete=completedSystemPhases(p)===systemPhases.length;
     const currentPhase=Math.min(systemsComplete?Number(p.meta.phase):Math.min(Number(p.meta.phase),3),6);
     const completedMilestones=Math.min(currentPhase,3)+completedSystemPhases(p)+(systemsComplete?1:0)+Math.max(0,currentPhase-4);
-    return header('00','Command centre','The live project picture: progress, money, evidence, risk and next work.')+
+    return header('00','Command centre',`The live project picture: progress, ${costTrackingEnabled(p)?'money, ':''}evidence, risk and next work.`)+
       `<div class="dashboard-grid">
         <section class="card span-3 metric plum"><span class="metric-label">ACTIVE PROJECT</span><strong>${esc(p.meta.name)}</strong><span class="metric-note">${esc(p.meta.vehicle||'Vehicle details to enter')}</span></section>
         <section class="card span-3 metric cyan"><span class="metric-label">BUILD COMPLETION</span><strong>${progress}<small>%</small></strong><span class="metric-note">Checklist and work-package completion</span></section>
-        <section class="card span-3 metric copper"><span class="metric-label">FORECAST COST</span><strong>${money(t.forecast||t.committed)}</strong><span class="metric-note">Paid ${money(t.paid)} · committed ${money(t.committed)}</span></section>
+        ${costTrackingEnabled(p)?`<section class="card span-3 metric copper"><span class="metric-label">FORECAST COST</span><strong>${money(t.forecast||t.committed)}</strong><span class="metric-note">Paid ${money(t.paid)} · committed ${money(t.committed)}</span></section>`:''}
         <section class="card span-3 metric ${openIssues?'copper':'green'}"><span class="metric-label">OPEN ISSUES</span><strong>${openIssues}</strong><span class="metric-note">${openIssues?'Review blockers and unresolved changes':'No open issues recorded'}</span></section>
         ${card('Build phase',`<div class="phase-track">${phaseNames.map((name,i)=>{
           const done=(i<3&&i<currentPhase)||(i===3&&systemsComplete)||(i>3&&i<currentPhase);
@@ -618,14 +623,16 @@ export function initBuildBinder(): void {
   }
 
   function commercial() {
+    const p=activeProject();
     const t=totals();
     return header('11','Procurement & budget','Connect every purchase to scope, provenance, fit and financial control.')+
     `<div class="dashboard-grid">
+      ${costTrackingEnabled(p)?`
       <section class="card span-3 metric"><span class="metric-label">APPROVED BUDGET</span><strong>${money(t.budget)}</strong><span class="metric-note">Current category total</span></section>
       <section class="card span-3 metric copper"><span class="metric-label">COMMITTED</span><strong>${money(t.committed)}</strong><span class="metric-note">Orders and approved work</span></section>
       <section class="card span-3 metric"><span class="metric-label">PAID</span><strong>${money(t.paid)}</strong><span class="metric-note">Recorded actual spend</span></section>
       <section class="card span-3 metric cyan"><span class="metric-label">FORECAST</span><strong>${money(t.forecast)}</strong><span class="metric-note">Expected total at completion</span></section>
-      ${card('Budget summary',table('budget'),{span:'span-12'})}
+      ${card('Budget summary',table('budget'),{span:'span-12'})}`:`<div class="callout" style="grid-column:span 12"><strong>Cost tracking is off</strong>Cost fields and totals are hidden for this project. You can turn them back on in the Binder design lab.</div>`}
       ${card('Procurement register',table('procurement','Procurement','No purchases recorded yet'),{span:'span-12'})}
       ${card('Consumables register',table('consumables','Consumables','No consumables recorded yet'),{span:'span-12'})}
       ${card('Part acceptance checklist',checklist('acceptance'),{span:'span-12'})}
@@ -633,9 +640,10 @@ export function initBuildBinder(): void {
   }
 
   function worklog() {
+    const p=activeProject();
     const t=totals();
     return header('12','Work, issues & milestones','Create a chronological record that explains what changed, why and how it was verified.')+
-    `<div class="section-grid">${card('Work log',table('worklog','Work log','No work entries recorded yet'),{span:'span-12',meta:`<span data-labor-total>LABOUR TOTAL ${money(t.labor)}</span>`})}${card('Issue / defect / change log',table('issues','Issues','No issues recorded'),{span:'span-12'})}${card('Milestone photographs',photoGallery('milestones'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Close-out standard</strong>An issue is closed only when the completed action and verification evidence are recorded—not merely when work starts.</div></div>`;
+    `<div class="section-grid">${card('Work log',table('worklog','Work log','No work entries recorded yet'),{span:'span-12',meta:costTrackingEnabled(p)?`<span data-labor-total>LABOUR TOTAL ${money(t.labor)}</span>`:''})}${card('Issue / defect / change log',table('issues','Issues','No issues recorded'),{span:'span-12'})}${card('Milestone photographs',photoGallery('milestones'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Close-out standard</strong>An issue is closed only when the completed action and verification evidence are recorded—not merely when work starts.</div></div>`;
   }
 
   function handover() {
@@ -651,7 +659,7 @@ export function initBuildBinder(): void {
   function design() {
     const p=activeProject();
     return header('DL','Binder design lab','Refine the screen experience and content before a dedicated printable edition is designed.')+
-    `<div class="section-grid">${card('Screen density',`<div class="design-options"><button class="option-tile ${p.preferences.density==='standard'?'selected':''}" data-preference="density" data-value="standard"><strong>Workshop standard</strong><small>Balanced spacing for laptop and desktop use.</small><div class="option-swatch"></div></button><button class="option-tile ${p.preferences.density==='compact'?'selected':''}" data-preference="density" data-value="compact"><strong>Compact control</strong><small>More records on screen with tighter vertical rhythm.</small><div class="option-swatch"></div></button></div>`,{span:'half'})}${card('Accessibility & contrast',`<div class="design-options"><button class="option-tile ${p.preferences.contrast==='standard'?'selected':''}" data-preference="contrast" data-value="standard"><strong>Blueprint</strong><small>Original technical-drawing palette.</small><div class="option-swatch"></div></button><button class="option-tile ${p.preferences.contrast==='high'?'selected':''}" data-preference="contrast" data-value="high"><strong>High contrast</strong><small>Brighter lines and secondary text.</small><div class="option-swatch"></div></button></div>`,{span:'half'})}${card('Refinement notes',`<div class="form-grid">${field('What feels useful?','designUseful',{type:'textarea'})}${field('What feels unnecessary?','designRemove',{type:'textarea'})}${field('What is missing?','designMissing',{type:'textarea'})}${field('What needs more detail?','designDetail',{type:'textarea'})}${field('Overall notes for next version','designNotes',{type:'textarea',span:'span-2'})}</div>`,{span:'span-12'})}${card('Change requests',table('refinements','Change requests','No design changes requested yet'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Version principle</strong>Refine the digital structure and content first. Page efficiency, print margins, duplex behaviour and low-ink styling belong to the later printable edition.</div></div>`;
+    `<div class="section-grid">${card('Screen density',`<div class="design-options"><button class="option-tile ${p.preferences.density==='standard'?'selected':''}" data-preference="density" data-value="standard"><strong>Workshop standard</strong><small>Balanced spacing for laptop and desktop use.</small><div class="option-swatch"></div></button><button class="option-tile ${p.preferences.density==='compact'?'selected':''}" data-preference="density" data-value="compact"><strong>Compact control</strong><small>More records on screen with tighter vertical rhythm.</small><div class="option-swatch"></div></button></div>`,{span:'half'})}${card('Accessibility & contrast',`<div class="design-options"><button class="option-tile ${p.preferences.contrast==='standard'?'selected':''}" data-preference="contrast" data-value="standard"><strong>Blueprint</strong><small>Original technical-drawing palette.</small><div class="option-swatch"></div></button><button class="option-tile ${p.preferences.contrast==='high'?'selected':''}" data-preference="contrast" data-value="high"><strong>High contrast</strong><small>Brighter lines and secondary text.</small><div class="option-swatch"></div></button></div>`,{span:'half'})}${card('Cost tracking',`<div class="design-options"><button class="option-tile ${costTrackingEnabled(p)?'selected':''}" data-preference="costTracking" data-value="true"><strong>Show costs</strong><small>Display budget, purchase and labour cost fields and totals.</small></button><button class="option-tile ${costTrackingEnabled(p)?'':'selected'}" data-preference="costTracking" data-value="false"><strong>Hide costs</strong><small>Hide cost fields and totals throughout this project.</small></button></div>`,{span:'half'})}${card('Refinement notes',`<div class="form-grid">${field('What feels useful?','designUseful',{type:'textarea'})}${field('What feels unnecessary?','designRemove',{type:'textarea'})}${field('What is missing?','designMissing',{type:'textarea'})}${field('What needs more detail?','designDetail',{type:'textarea'})}${field('Overall notes for next version','designNotes',{type:'textarea',span:'span-2'})}</div>`,{span:'span-12'})}${card('Change requests',table('refinements','Change requests','No design changes requested yet'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Version principle</strong>Refine the digital structure and content first. Page efficiency, print margins, duplex behaviour and low-ink styling belong to the later printable edition.</div></div>`;
   }
 
   const renderers={dashboard,identity,baseline,vision,planning,disassembly,body,chassis,powertrain,electrical,interior,commercial,worklog,handover,library,design};
@@ -690,7 +698,8 @@ export function initBuildBinder(): void {
   }
 
   function newProjectModal() {
-    openModal('NEW RESTORATION','Create a new project',`<div class="form-grid"><div class="field"><label>Project name</label><input id="newProjectName" placeholder="e.g. Dad’s FJ Holden"></div><div class="field"><label>Vehicle description</label><input id="newProjectVehicle" placeholder="Year / make / model / body"></div><div class="field"><label>Project code</label><input id="newProjectCode" placeholder="e.g. FJH-001"></div><div class="field"><label>Start from</label><select id="newProjectSource"><option value="blank">Clean reusable template</option><option value="prepopulated">Generic restoration starter — pre-filled lists, no vehicle details</option><option value="clone">Clone current project structure and data</option></select></div></div><div class="callout" style="margin-top:14px"><strong>Choose your starting point</strong>The generic restoration starter includes common work areas, system registers, test stages and actions, without vehicle-specific information.</div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="createProjectConfirm">Create project</button>`);
+    const trackCosts=costTrackingEnabled();
+    openModal('NEW RESTORATION','Create a new project',`<div class="form-grid"><div class="field"><label>Project name</label><input id="newProjectName" placeholder="e.g. Dad’s FJ Holden"></div><div class="field"><label>Vehicle description</label><input id="newProjectVehicle" placeholder="Year / make / model / body"></div><div class="field"><label>Project code</label><input id="newProjectCode" placeholder="e.g. FJH-001"></div><div class="field"><label>Start from</label><select id="newProjectSource"><option value="blank">Clean reusable template</option><option value="prepopulated">Generic restoration starter — pre-filled lists, no vehicle details</option><option value="clone">Clone current project structure and data</option></select></div><div class="field"><label for="newProjectCostTracking">Cost tracking</label><select id="newProjectCostTracking"><option value="true" ${trackCosts?'selected':''}>On — show cost fields and totals</option><option value="false" ${trackCosts?'':'selected'}>Off — hide costs</option></select></div></div><div class="callout" style="margin-top:14px"><strong>Choose your starting point</strong>The generic restoration starter includes common work areas, system registers, test stages and actions, without vehicle-specific information. You can change cost tracking later in the Binder design lab.</div>`,`<button class="button ghost" data-modal-close>Cancel</button><button class="button primary" id="createProjectConfirm">Create project</button>`);
   }
 
   function dataModal() {
@@ -860,7 +869,7 @@ export function initBuildBinder(): void {
       queueSave('Build phase updated');
       render();
     }
-    const pref=e.target.closest('[data-preference]'); if(pref){ activeProject().preferences[pref.dataset.preference]=pref.dataset.value; queueSave('Display preference updated'); render(); }
+    const pref=e.target.closest('[data-preference]'); if(pref){ activeProject().preferences[pref.dataset.preference]=pref.dataset.preference==='costTracking'?pref.dataset.value==='true':pref.dataset.value; queueSave('Display preference updated'); render(); }
     const galleryRemove=e.target.closest('[data-gallery-remove]');
     if(galleryRemove){
       const gallery=galleryRemove.dataset.galleryRemove;
@@ -888,6 +897,7 @@ export function initBuildBinder(): void {
       const name=$('#newProjectName').value.trim()||'Untitled restoration'; const vehicle=$('#newProjectVehicle').value.trim()||'Vehicle details to enter';
       const source=$('#newProjectSource').value;
       let p=source==='clone'?clone(activeProject()):source==='prepopulated'?prepopulatedGenericProject(name,vehicle):genericProject(name,vehicle);
+      p.preferences.costTracking=$('#newProjectCostTracking').value==='true';
       p.id=uid('project'); p.meta.name=name; p.meta.vehicle=vehicle; p.meta.code=$('#newProjectCode').value.trim()||'NEW-001'; p.meta.showcase=false; p.meta.updated=today();
       state.projects.push(p); state.activeProjectId=p.id; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); closeModal(); activeSection='dashboard'; location.hash='dashboard'; render(); toast('Project created',`${name} is ready.`);
     }
