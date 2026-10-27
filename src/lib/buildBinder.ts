@@ -41,7 +41,7 @@ export function initBuildBinder(): void {
     { id: 'disassembly', index: '05', label: 'Disassembly & parts', group: 'CONTROL' },
     { id: 'body', index: '06', label: 'Body, shell & paint', group: 'BUILD SYSTEMS' },
     { id: 'chassis', index: '07', label: 'Chassis, brakes & wheels', group: 'BUILD SYSTEMS' },
-    { id: 'powertrain', index: '08', label: 'Powertrain & support', group: 'BUILD SYSTEMS' },
+    { id: 'powertrain', index: '08', label: 'Engine and Driveline', group: 'BUILD SYSTEMS' },
     { id: 'electrical', index: '09', label: 'Electrical & Parts', group: 'BUILD SYSTEMS' },
     { id: 'interior', index: '10', label: 'Interior, trim & glass', group: 'BUILD SYSTEMS' },
     { id: 'commercial', index: '11', label: 'Parts & budget', group: 'DELIVERY' },
@@ -636,8 +636,8 @@ export function initBuildBinder(): void {
   }
 
   function powertrain() {
-    return header('08','Powertrain & support','Connect specification, machine work, parts, clearances, setup and test results.')+
-    `<div class="section-grid">${card('Major assembly identity',`<div class="form-grid three">${field('Engine / assembly ID','engineId')}${field('Transmission ID','transmissionBuildId')}${field('Differential / axle ID','axleId')}${field('Builder / specialist','builder')}${field('Target use / output','targetOutput')}${field('Build sheet location','buildSheet')}</div>`,{span:'span-12'})}${card('Powertrain & supporting systems',table('powertrain'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Source discipline</strong>Do not copy critical clearances, capacities or torque values without naming the manual, data sheet or specialist that supplied them.</div></div>`;
+    return header('08','Engine and Driveline','Connect specification, machine work, parts, clearances, setup and test results.')+
+    `<div class="section-grid">${card('Major assembly identity',`<div class="form-grid three">${field('Engine / assembly ID','engineId')}${field('Transmission ID','transmissionBuildId')}${field('Differential / axle ID','axleId')}${field('Builder / specialist','builder')}${field('Target use / output','targetOutput')}${field('Build sheet location','buildSheet')}</div>`,{span:'span-12'})}${card('Engine & Driveline',table('powertrain'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Source discipline</strong>Do not copy critical clearances, capacities or torque values without naming the manual, data sheet or specialist that supplied them.</div></div>`;
   }
 
   function electrical() {
