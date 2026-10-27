@@ -343,6 +343,7 @@ export function initBuildBinder(): void {
   let saveTimer;
   let pendingProjectImage=null;
   let dashboardActionTab='open';
+  let actionRegisterTab='open';
   const editableChecklists = new Set();
 
   const $ = selector => document.querySelector(selector);
@@ -475,7 +476,11 @@ export function initBuildBinder(): void {
   }
 
   function table(name,title,emptyText='No records yet') {
-    const p=activeProject(); const schema=tableSchemas[name]; const rows=p.tables[name]||[];
+    const p=activeProject(); const schema=tableSchemas[name];
+    const allRows=p.tables[name]||[];
+    const rows=name==='actions'
+      ?allRows.filter(item=>actionRegisterTab==='complete'?item.status==='COMPLETE':item.status!=='COMPLETE')
+      :allRows;
     const columns=schema.columns.filter(([key])=>costTrackingEnabled(p)||!costFields.has(key));
     const headers=columns.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th aria-label="Row actions"></th>';
     const body=rows.map(r=>`<tr data-row="${r._id}">${columns.map(([key,label,type])=>{
@@ -620,8 +625,11 @@ export function initBuildBinder(): void {
   }
 
   function planning() {
+    const actions=activeProject().tables.actions||[];
+    const openActions=actions.filter(item=>item.status!=='COMPLETE');
+    const completedActions=actions.filter(item=>item.status==='COMPLETE');
     return header('04','Planning & Decisions','Sequence work around evidence, dependencies, risk and irreversible choices.')+
-    `<div class="section-grid">${card('Next actions',table('actions'),{span:'span-12'})}${card('Decision register',table('decisions'),{span:'span-12'})}${card('Risk register',table('risks'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Approval gate</strong>Record a decision before changing identity, cutting structure, deleting original features, ordering high-value custom parts or applying final finish.</div></div>`;
+    `<div class="section-grid">${card('Next actions',`<div class="action-tabs" role="tablist" aria-label="Action register"><button type="button" class="${actionRegisterTab==='open'?'active':''}" role="tab" aria-selected="${actionRegisterTab==='open'}" data-action-register-tab="open">Next actions (${openActions.length})</button><button type="button" class="${actionRegisterTab==='complete'?'active':''}" role="tab" aria-selected="${actionRegisterTab==='complete'}" data-action-register-tab="complete">Complete (${completedActions.length})</button></div><div role="tabpanel">${table('actions')}</div>`,{span:'span-12'})}${card('Decision register',table('decisions'),{span:'span-12'})}${card('Risk register',table('risks'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Approval gate</strong>Record a decision before changing identity, cutting structure, deleting original features, ordering high-value custom parts or applying final finish.</div></div>`;
   }
 
   function disassembly() {
@@ -889,6 +897,11 @@ export function initBuildBinder(): void {
     const actionTab=e.target.closest('[data-action-tab]');
     if(actionTab){
       dashboardActionTab=actionTab.dataset.actionTab;
+      render(true);
+    }
+    const actionRegisterTabButton=e.target.closest('[data-action-register-tab]');
+    if(actionRegisterTabButton){
+      actionRegisterTab=actionRegisterTabButton.dataset.actionRegisterTab;
       render(true);
     }
     const section=e.target.closest('[data-section]'); if(section){ activeSection=section.dataset.section; location.hash=activeSection; $('#sidebar').classList.remove('open'); render(); }
