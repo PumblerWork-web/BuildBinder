@@ -657,7 +657,7 @@ export function initBuildBinder(): void {
 
   function chassis() {
     return header('07','Chassis, Brakes & Wheels','Control safety-critical components with measurements, sources and verification.')+
-    `<div class="section-grid">${card('System build record',table('chassis'),{span:'span-12'})}${card('Chassis parts',table('chassisParts','Chassis parts','No chassis parts recorded yet'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Safety record</strong>Torque values and procedures must come from an identified authoritative source or qualified specialist. Record the source in the reference library.</div></div>`;
+    `<div class="section-grid">${card('System build record',table('chassis'),{span:'span-12'})}${card('Parts',table('chassisParts','Parts','No parts recorded yet'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Safety record</strong>Torque values and procedures must come from an identified authoritative source or qualified specialist. Record the source in the reference library.</div></div>`;
   }
 
   function powertrain() {
