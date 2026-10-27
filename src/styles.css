@@ -228,6 +228,10 @@ a { color: var(--cyan); }
 .badge.superseded { color: var(--plum); border-color: rgba(192,106,166,.45); }
 
 .check-list { display: grid; gap: 7px; }
+.action-tabs { display: flex; gap: 6px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.action-tabs button { padding: 8px 11px; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; cursor: pointer; font: 600 9px var(--mono); letter-spacing: .05em; text-transform: uppercase; }
+.action-tabs button:hover, .action-tabs button.active { border-bottom-color: var(--cyan); color: var(--cyan); }
+.action-tabs button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .check-item { display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
 .check-item:last-child { border-bottom: 0; }
 .check-item input[type="checkbox"] { appearance: none; width: 16px; height: 16px; border: 1px solid var(--line-strong); background: transparent; }

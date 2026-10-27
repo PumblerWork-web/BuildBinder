@@ -33,21 +33,21 @@ export function initBuildBinder(): void {
   };
 
   const sectionDefs = [
-    { id: 'dashboard', index: '00', label: 'Command centre', group: 'OVERVIEW' },
-    { id: 'identity', index: '01', label: 'Identity & history', group: 'PROJECT RECORD' },
-    { id: 'baseline', index: '02', label: 'Baseline condition', group: 'PROJECT RECORD' },
-    { id: 'vision', index: '03', label: 'Vision & scope', group: 'PROJECT RECORD' },
-    { id: 'planning', index: '04', label: 'Planning & decisions', group: 'CONTROL' },
-    { id: 'disassembly', index: '05', label: 'Disassembly & parts', group: 'CONTROL' },
-    { id: 'body', index: '06', label: 'Body, shell & paint', group: 'BUILD SYSTEMS' },
-    { id: 'chassis', index: '07', label: 'Chassis, brakes & wheels', group: 'BUILD SYSTEMS' },
+    { id: 'dashboard', index: '00', label: 'Command Centre', group: 'OVERVIEW' },
+    { id: 'identity', index: '01', label: 'Identity & History', group: 'PROJECT RECORD' },
+    { id: 'baseline', index: '02', label: 'Baseline Condition', group: 'PROJECT RECORD' },
+    { id: 'vision', index: '03', label: 'Vision & Scope', group: 'PROJECT RECORD' },
+    { id: 'planning', index: '04', label: 'Planning & Decisions', group: 'CONTROL' },
+    { id: 'disassembly', index: '05', label: 'Disassembly & Parts', group: 'CONTROL' },
+    { id: 'body', index: '06', label: 'Body, Shell & Paint', group: 'BUILD SYSTEMS' },
+    { id: 'chassis', index: '07', label: 'Chassis, Brakes & Wheels', group: 'BUILD SYSTEMS' },
     { id: 'powertrain', index: '08', label: 'Engine and Driveline', group: 'BUILD SYSTEMS' },
     { id: 'electrical', index: '09', label: 'Electrical & Parts', group: 'BUILD SYSTEMS' },
-    { id: 'interior', index: '10', label: 'Interior, trim & glass', group: 'BUILD SYSTEMS' },
-    { id: 'commercial', index: '11', label: 'Parts & budget', group: 'DELIVERY' },
-    { id: 'worklog', index: '12', label: 'Work, issues & milestones', group: 'DELIVERY' },
-    { id: 'handover', index: '13', label: 'Compliance & handover', group: 'DELIVERY' },
-    { id: 'library', index: '14', label: 'Reference library', group: 'DELIVERY' },
+    { id: 'interior', index: '10', label: 'Interior, Trim & Glass', group: 'BUILD SYSTEMS' },
+    { id: 'commercial', index: '11', label: 'Parts & Budget', group: 'DELIVERY' },
+    { id: 'worklog', index: '12', label: 'Work, Issues & Milestones', group: 'DELIVERY' },
+    { id: 'handover', index: '13', label: 'Compliance & Handover', group: 'DELIVERY' },
+    { id: 'library', index: '14', label: 'Reference Library', group: 'DELIVERY' },
     { id: 'design', index: 'DL', label: 'Binder design lab', group: 'REFINE THE BINDER' }
   ];
 
@@ -342,6 +342,7 @@ export function initBuildBinder(): void {
   if (!sectionDefs.some(s=>s.id===activeSection)) activeSection='dashboard';
   let saveTimer;
   let pendingProjectImage=null;
+  let dashboardActionTab='open';
   const editableChecklists = new Set();
 
   const $ = selector => document.querySelector(selector);
@@ -567,6 +568,9 @@ export function initBuildBinder(): void {
     const p=activeProject(); const t=totals(p); const progress=completion(p);
     const openIssues=(p.tables.issues||[]).filter(x=>!['CLOSED','COMPLETE'].includes(x.status)).length;
     const nextActions=(p.tables.actions||[]).filter(x=>x.status!=='COMPLETE').slice(0,5);
+    const completedActions=(p.tables.actions||[]).filter(x=>x.status==='COMPLETE');
+    const displayedActions=dashboardActionTab==='complete'?completedActions:nextActions;
+    const actionList=displayedActions.length?`<div class="check-list">${displayedActions.map(a=>`<div class="check-item"><span>${badge(a.priority)}</span><label><strong>${esc(a.action||'Untitled action')}</strong><br><small>${esc(a.owner||'Unassigned')} · ${esc(a.due||'No due date')}</small></label>${badge(a.status)}</div>`).join('')}</div>`:`<div class="empty-state"><h3>${dashboardActionTab==='complete'?'No completed actions':'No open actions'}</h3><p>${dashboardActionTab==='complete'?'Completed actions will appear here.':'Add a next action to move the build forward.'}</p></div>`;
     const evidence=(p.tables.evidence||[]); const verified=evidence.filter(x=>x.status==='VERIFIED').length;
     const systemsComplete=completedSystemPhases(p)===systemPhases.length;
     const currentPhase=Math.min(systemsComplete?Number(p.meta.phase):Math.min(Number(p.meta.phase),3),6);
@@ -589,7 +593,7 @@ export function initBuildBinder(): void {
           return `<button class="system-phase ${done?'done':''}" data-system-phase="${id}" aria-pressed="${done}" ${locked?'disabled':''}><span>04.${i+1}</span><strong>${name}</strong><small>${done?'DONE':'MARK COMPLETE'}</small></button>`;
         }).join('')}</div>`,{span:'span-12',meta:`${completedMilestones} OF 10 MILESTONES COMPLETE`})}
         ${card('Project health',`<div class="progress-row"><div class="progress-ring" style="--progress:${progress}"><strong>${progress}%</strong></div><div class="progress-detail"><h3>${badge(p.meta.status)} &nbsp; ${badge(p.fields.identityStatus||'DRAFT')}</h3><p><b>Next milestone:</b> ${esc(p.fields.nextMilestone||'Not set')}<br><b>Next review:</b> ${esc(p.fields.nextReview||'Not set')}<br><b>Evidence verified:</b> ${verified} of ${evidence.length}</p></div></div>`,{span:'span-5'})}
-        ${card('Next actions',nextActions.length?`<div class="check-list">${nextActions.map(a=>`<div class="check-item"><span>${badge(a.priority)}</span><label><strong>${esc(a.action||'Untitled action')}</strong><br><small>${esc(a.owner||'Unassigned')} · ${esc(a.due||'No due date')}</small></label>${badge(a.status)}</div>`).join('')}</div>`:`<div class="empty-state"><h3>No open actions</h3><p>Add a next action to move the build forward.</p></div>`,{span:'span-7',meta:`PLANNING & DECISIONS · ACTIONS · ${nextActions.length} SHOWN`})}
+        ${card('Next actions',`<div class="action-tabs" role="tablist" aria-label="Action lists"><button type="button" class="${dashboardActionTab==='open'?'active':''}" role="tab" aria-selected="${dashboardActionTab==='open'}" data-action-tab="open">Next actions (${nextActions.length})</button><button type="button" class="${dashboardActionTab==='complete'?'active':''}" role="tab" aria-selected="${dashboardActionTab==='complete'}" data-action-tab="complete">Complete (${completedActions.length})</button></div><div role="tabpanel">${actionList}</div>`,{span:'span-7',meta:`PLANNING & DECISIONS · ACTIONS · ${dashboardActionTab==='complete'?completedActions.length:`${nextActions.length} SHOWN`}`})}
         ${card('Project control',`<div class="form-grid">${field('Project name','name',{path:'meta'})}${field('Vehicle description','vehicle',{path:'meta'})}${field('Project code','code',{path:'meta'})}${field('Binder version','version',{path:'meta'})}${field('Project owner','owner',{path:'meta'})}${field('Project status','status',{path:'meta',options:fieldTypes.projectStatus})}${field('Master file location','binderLocation')}${field('Photo / media location','mediaLocation')}${field('Next milestone','nextMilestone',{span:'span-2'})}${field('Next review','nextReview',{type:'date'})}</div>`,{span:'span-12'})}
       </div>`;
   }
@@ -606,32 +610,32 @@ export function initBuildBinder(): void {
   }
 
   function baseline() {
-    return header('02','Baseline condition','Capture the starting point before dismantling, cleaning or replacing evidence.')+
+    return header('02','Baseline Condition','Capture the starting point before dismantling, cleaning or replacing evidence.')+
     `<div class="section-grid">${card('Condition summary',table('condition'),{span:'span-12'})}${card('Immediate preservation & safety',checklist('baseline'),{span:'half'})}${card('Baseline photo survey',photoGallery('baseline'),{span:'half'})}<div class="callout warning" style="grid-column:span 12"><strong>Stop-work trigger</strong>If identity, structural safety, hazardous materials or legal ownership is uncertain, pause irreversible work and obtain appropriate specialist advice.</div></div>`;
   }
 
   function vision() {
-    return header('03','Vision & scope','Turn the dream into explicit choices that can be costed, built and verified.')+
+    return header('03','Vision & Scope','Turn the dream into explicit choices that can be costed, built and verified.')+
     `<div class="section-grid">${card('Build brief',`<div class="form-grid">${field('Intended use','intendedUse')}${field('Restoration approach','approach',{options:fieldTypes.approach})}${field('Finish standard','finishStandard',{options:fieldTypes.finish})}${field('Authenticity priority','authenticity')}${field('Performance goal','performanceGoal')}${field('Reliability / serviceability goal','reliabilityGoal')}${field('Comfort / usability goal','comfortGoal')}${field('Non-negotiables','nonNegotiables',{type:'textarea'})}${field('Vision statement','visionStatement',{type:'textarea',span:'span-2'})}${field('Success statement','success',{type:'textarea',span:'span-2'})}</div>`,{span:'span-12'})}${card('Scope boundaries',`<div class="form-grid three">${field('In scope now','inScope',{type:'textarea'})}${field('Deferred / future','deferred',{type:'textarea'})}${field('Explicitly out of scope','outScope',{type:'textarea'})}</div>`,{span:'span-12'})}<div class="callout plum" style="grid-column:span 12"><strong>Restoration brief</strong>Define a documented, purpose-led restoration that meets the intended use. Preserve evidence before work and verify specification claims against reliable sources.</div></div>`;
   }
 
   function planning() {
-    return header('04','Planning & decisions','Sequence work around evidence, dependencies, risk and irreversible choices.')+
+    return header('04','Planning & Decisions','Sequence work around evidence, dependencies, risk and irreversible choices.')+
     `<div class="section-grid">${card('Next actions',table('actions'),{span:'span-12'})}${card('Decision register',table('decisions'),{span:'span-12'})}${card('Risk register',table('risks'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Approval gate</strong>Record a decision before changing identity, cutting structure, deleting original features, ordering high-value custom parts or applying final finish.</div></div>`;
   }
 
   function disassembly() {
-    return header('05','Disassembly & parts','Make every removed item findable, identifiable and re-installable.')+
+    return header('05','Disassembly & Parts','Make every removed item findable, identifiable and re-installable.')+
     `<div class="section-grid">${card('Tagging convention',`<div class="form-grid">${field('Project prefix','tagPrefix')}${field('Area codes','areaCodes')}${field('Container label format','containerFormat')}${field('Tag example','tagExample',{placeholder:'e.g. WPXA-BDY-001'})}</div>`,{span:'half'})}${card('Removal discipline',checklist('disassembly'),{span:'half'})}${card('Parts inventory & storage map',table('inventory','Parts inventory','No parts have been catalogued yet'),{span:'span-12'})}${card('Disassembly log',table('disassemblyLog','Areas / parts disassembled','No disassembly records yet'),{span:'span-12'})}${card('Disassembly photos',photoGallery('disassembly'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Loss prevention</strong>Do not use “miscellaneous” as a permanent category. Every loose fastener, bracket, clip and shim should inherit the assembly tag.</div></div>`;
   }
 
   function body() {
-    return header('06','Body, shell & paint','Document structure first; decide finish after fit and repair strategy are understood.')+
+    return header('06','Body, Shell & Paint','Document structure first; decide finish after fit and repair strategy are understood.')+
     `<div class="section-grid">${card('Body & structural assessment',table('body'),{span:'span-12'})}${card('Rust repair register',table('rustRepairs','Rust repair register','No rust repairs recorded yet'),{span:'span-12'})}${card('Paint & finish direction',`<div class="form-grid">${field('Colour / finish direction','colourDirection')}${field('Code / formula','paintCode')}${field('Paint system / brand','paintSystem')}${field('Gloss / texture target','glossTarget')}${field('Underbody / cavity protection','protection')}${field('Decision status','bodyPaintStatus',{options:fieldTypes.status})}</div>`,{span:'half'})}${card('Finish evidence',photoGallery('body'),{span:'half'})}<div class="callout warning" style="grid-column:span 12"><strong>Hold point</strong>Complete structural inspection, trial assembly and panel-gap approval before final paint preparation.</div></div>`;
   }
 
   function chassis() {
-    return header('07','Chassis, brakes & wheels','Control safety-critical components with measurements, sources and verification.')+
+    return header('07','Chassis, Brakes & Wheels','Control safety-critical components with measurements, sources and verification.')+
     `<div class="section-grid">${card('System build record',table('chassis'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Safety record</strong>Torque values and procedures must come from an identified authoritative source or qualified specialist. Record the source in the reference library.</div></div>`;
   }
 
@@ -646,14 +650,14 @@ export function initBuildBinder(): void {
   }
 
   function interior() {
-    return header('10','Interior, trim & glass','Record appearance, materials, fit, provenance and water-management details.')+
+    return header('10','Interior, Trim & Glass','Record appearance, materials, fit, provenance and water-management details.')+
     `<div class="section-grid">${card('Interior / trim build record',table('trim'),{span:'span-12'})}${card('Reference photographs',photoGallery('interior'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Assembly sequence</strong>Trial-fit trim, glass, mechanisms and seals early enough to resolve holes, clips, clearances and water paths before final finishes become vulnerable.</div></div>`;
   }
 
   function commercial() {
     const p=activeProject();
     const t=totals();
-    return header('11','Parts & budget','Connect every purchase to scope, provenance, fit and financial control.')+
+    return header('11','Parts & Budget','Connect every purchase to scope, provenance, fit and financial control.')+
     `<div class="dashboard-grid">
       ${costTrackingEnabled(p)?`
       <section class="card span-3 metric"><span class="metric-label">APPROVED BUDGET</span><strong>${money(t.budget)}</strong><span class="metric-note">Current category total</span></section>
@@ -670,17 +674,17 @@ export function initBuildBinder(): void {
   function worklog() {
     const p=activeProject();
     const t=totals();
-    return header('12','Work, issues & milestones','Create a chronological record that explains what changed, why and how it was verified.')+
+    return header('12','Work, Issues & Milestones','Create a chronological record that explains what changed, why and how it was verified.')+
     `<div class="section-grid">${card('Work log',table('worklog','Work log','No work entries recorded yet'),{span:'span-12',meta:costTrackingEnabled(p)?`<span data-labor-total>LABOUR TOTAL ${money(t.labor)}</span>`:''})}${card('Issue / defect / change log',table('issues','Issues','No issues recorded'),{span:'span-12'})}${card('Milestone photographs',photoGallery('milestones'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Close-out standard</strong>An issue is closed only when the completed action and verification evidence are recorded—not merely when work starts.</div></div>`;
   }
 
   function handover() {
-    return header('13','Compliance & handover','Prove the finished vehicle is safe, legal for its intended use and understandable to its next custodian.')+
+    return header('13','Compliance & Handover','Prove the finished vehicle is safe, legal for its intended use and understandable to its next custodian.')+
     `<div class="section-grid">${card('Compliance & inspection register',table('compliance'),{span:'span-12'})}${card('Pre-start hold point',checklist('prestart'),{span:'half'})}${card('Handover pack',checklist('handover'),{span:'half'})}${card('Commissioning & road-test plan',table('tests'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Jurisdiction note</strong>Requirements vary by vehicle, modifications, intended use and location. Record advice from the relevant authority or qualified specialist.</div></div>`;
   }
 
   function library() {
-    return header('14','Reference library','Make every technical claim, purchase and approval traceable to its source.')+
+    return header('14','Reference Library','Make every technical claim, purchase and approval traceable to its source.')+
     `<div class="section-grid">${card('Reference register',table('references','References','No reference documents indexed yet'),{span:'span-12'})}${card('Library rules',`<div class="callout"><strong>Link resilience</strong>Prefer stable cloud links and consistent filenames. If files move, update the register as part of the same change.</div><div class="callout warning" style="margin-top:12px"><strong>Authority</strong>Mark the document version, publication date or specialist. A source without identity is difficult to verify later.</div>`,{span:'span-12'})}</div>`;
   }
 
@@ -881,6 +885,11 @@ export function initBuildBinder(): void {
     if(e.target.closest('[data-electrical-photo-add]')){
       closeModal();
       $('#add-gallery-electrical').click();
+    }
+    const actionTab=e.target.closest('[data-action-tab]');
+    if(actionTab){
+      dashboardActionTab=actionTab.dataset.actionTab;
+      render(true);
     }
     const section=e.target.closest('[data-section]'); if(section){ activeSection=section.dataset.section; location.hash=activeSection; $('#sidebar').classList.remove('open'); render(); }
     if(e.target.closest('[data-action="quick-add"]')||e.target.closest('#quickAddButton')) quickAddModal();
