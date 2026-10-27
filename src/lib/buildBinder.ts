@@ -19,7 +19,8 @@ export function initBuildBinder(): void {
     baseline: ['Front three-quarter','Rear three-quarter','Left side','Right side','Engine bay','Cabin / dashboard','Underbody / structure','Boot / load area'],
     body: ['Original or surviving finish','Approved spray-out','Repair evidence','Finished result'],
     interior: ['Interior before','Dashboard / controls','Trim reference','Interior finished'],
-    milestones: ['Before — repeatable angle','After — same angle','Detail before','Detail after']
+    milestones: ['Before — repeatable angle','After — same angle','Detail before','Detail after'],
+    electrical: ['Wiring / harness','Connectors / terminals','Component identification','Installed electrical parts']
   };
 
   const legacyPhotoGallery = {
@@ -98,8 +99,8 @@ export function initBuildBinder(): void {
       blank: { circuit:'', supply:'', route:'', earth:'', test:'', status:'NOT STARTED' }
     },
     electricalParts: {
-      columns: [['part','Part / component','text'],['specification','Specification / rating','text'],['quantity','Qty','number'],['supplier','Supplier / source','text'],['status','Status','taskstatus']],
-      blank: { part:'', specification:'', quantity:'', supplier:'', status:'NOT STARTED' }
+      columns: [['part','Part / component','text'],['specification','Specification / rating','text'],['quantity','Qty','number'],['supplierLink','Supplier / link','text'],['photoId','Photos','electricalpartphoto']],
+      blank: { part:'', specification:'', quantity:'', supplierLink:'', photoId:'' }
     },
     trim: {
       columns: [['area','Area','text'],['existing','Existing / evidence','text'],['target','Target / material','text'],['supplier','Supplier / craftsperson','text'],['status','Status','taskstatus']],
@@ -246,7 +247,7 @@ export function initBuildBinder(): void {
         references: [], refinements: []
       },
       photos: {},
-      photoGalleries: { identity:[], baseline:[], body:[], interior:[], milestones:[] },
+      photoGalleries: { identity:[], baseline:[], body:[], interior:[], milestones:[], electrical:[] },
       projectImage: null,
       preferences: { density:'standard', contrast:'standard', accent:'blueprint', printScope:'current', costTracking:true }
     };
@@ -476,6 +477,10 @@ export function initBuildBinder(): void {
         const legacyEvidence=r.evidence?`<small class="legacy-evidence">${esc(r.evidence)}</small>`:'';
         return `<td class="condition-photo-cell"><select data-condition-photo-select aria-label="Evidence photos for ${esc(r.area||'condition summary')}" ${linkedPhotos.length?'':'disabled'}><option value="">${linkedPhotos.length?'Select a photo…':'No linked photos'}</option>${linkedPhotos.map(photo=>`<option value="${esc(photo.id)}">${esc(photo.caption||photo.name||'Untitled photo')}</option>`).join('')}</select>${legacyEvidence}</td>`;
       }
+      if(type==='electricalpartphoto'){
+        const photos=p.photoGalleries?.electrical||[];
+        return `<td><select data-electrical-photo-link aria-label="Photo for ${esc(r.part||'electrical part')}" ${photos.length?'':'disabled'}><option value="">${photos.length?'No photo linked':'Add an electrical photo below'}</option>${photos.map(photo=>`<option value="${esc(photo.id)}" ${value===photo.id?'selected':''}>${esc(photo.caption||photo.name||'Untitled photo')}</option>`).join('')}</select></td>`;
+      }
       if (['status','priority','risk','taskstatus','procurementstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
       if (type==='text') return `<td><textarea class="auto-grow auto-grow-compact" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="1" placeholder="Enter…">${esc(value)}</textarea></td>`;
       return `<td><input aria-label="${esc(label)}" data-table="${name}" data-key="${key}" type="${type}" value="${esc(value)}" placeholder="Enter…" ${type==='number'?'step="0.01"':''}></td>`;
@@ -620,7 +625,7 @@ export function initBuildBinder(): void {
 
   function electrical() {
     return header('09','Electrical & controls','Create a serviceable system whose routes, loads, protection and changes are documented.')+
-    `<div class="section-grid">${card('Electrical architecture',`<div class="form-grid three">${field('System voltage','voltage')}${field('Battery location / type','battery')}${field('Main protection','mainProtection')}${field('Earth strategy','earthStrategy')}${field('Harness approach','harness')}${field('Diagram location','diagram')}</div>`,{span:'span-12'})}${card('Circuit register',table('circuits'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Change control</strong>Every non-original circuit should have a purpose, protection rating, route, wire identification, earth point and updated diagram.</div>${card('Electrical parts',table('electricalParts','Electrical parts','No electrical parts recorded yet'),{span:'span-12'})}</div>`;
+    `<div class="section-grid">${card('Electrical architecture',`<div class="form-grid three">${field('System voltage','voltage')}${field('Battery location / type','battery')}${field('Main protection','mainProtection')}${field('Earth strategy','earthStrategy')}${field('Harness approach','harness')}${field('Diagram location','diagram')}</div>`,{span:'span-12'})}${card('Circuit register',table('circuits'),{span:'span-12'})}<div class="callout warning" style="grid-column:span 12"><strong>Change control</strong>Every non-original circuit should have a purpose, protection rating, route, wire identification, earth point and updated diagram.</div>${card('Electrical parts',table('electricalParts','Electrical parts','No electrical parts recorded yet'),{span:'span-12'})}${card('Electrical photos',photoGallery('electrical'),{span:'span-12'})}</div>`;
   }
 
   function interior() {
@@ -888,6 +893,7 @@ export function initBuildBinder(): void {
       const photoId=confirmPhotoRemove.dataset.photoId;
       const project=activeProject();
       project.photoGalleries[gallery]=project.photoGalleries[gallery].filter(photo=>photo.id!==photoId);
+      if(gallery==='electrical') (project.tables.electricalParts||[]).forEach(part=>{ if(part.photoId===photoId) part.photoId=''; });
       queueSave('Photo removed');
       closeModal();
       render();
@@ -934,6 +940,7 @@ export function initBuildBinder(): void {
         photo.caption=e.target.value;
         queueSave('Photo caption updated');
         app.querySelectorAll(`[data-condition-photo-select] option[value="${photo.id}"]`).forEach(option=>option.textContent=photo.caption||photo.name||'Untitled photo');
+        app.querySelectorAll(`[data-electrical-photo-link] option[value="${photo.id}"]`).forEach(option=>option.textContent=photo.caption||photo.name||'Untitled photo');
       }
     }
     if(e.target.matches('[data-checklist-label]')){
@@ -959,6 +966,15 @@ export function initBuildBinder(): void {
     if(e.target.matches('[data-condition-photo-select]')&&e.target.value){
       document.getElementById(`photo-${e.target.value}`)?.scrollIntoView({behavior:'smooth',block:'center'});
       e.target.value='';
+    }
+    if(e.target.matches('[data-electrical-photo-link]')){
+      const rowEl=e.target.closest('tr');
+      const part=activeProject().tables.electricalParts.find(item=>item._id===rowEl.dataset.row);
+      if(part){
+        part.photoId=e.target.value;
+        queueSave('Electrical part photo link updated');
+        if(part.photoId) document.getElementById(`photo-${part.photoId}`)?.scrollIntoView({behavior:'smooth',block:'center'});
+      }
     }
     if(e.target===projectSelect){ state.activeProjectId=e.target.value; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); render(); toast('Project switched',activeProject().meta.name); }
     if(e.target.id==='importFile' && e.target.files[0]) importJson(e.target.files[0]);
