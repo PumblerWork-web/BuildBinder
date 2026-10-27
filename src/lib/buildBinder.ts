@@ -20,7 +20,8 @@ export function initBuildBinder(): void {
     body: ['Original or surviving finish','Approved spray-out','Repair evidence','Finished result'],
     interior: ['Interior before','Dashboard / controls','Trim reference','Interior finished'],
     milestones: ['Before — repeatable angle','After — same angle','Detail before','Detail after'],
-    electrical: ['Wiring / harness','Connectors / terminals','Component identification','Installed electrical parts']
+    electrical: ['Wiring / harness','Connectors / terminals','Component identification','Installed electrical parts'],
+    disassembly: ['Before removal','As found','Damage / faults','Parts and fixings']
   };
 
   const legacyPhotoGallery = {
@@ -81,6 +82,10 @@ export function initBuildBinder(): void {
     inventory: {
       columns: [['tag','Tag','text'],['part','Part / assembly','text'],['condition','Condition','text'],['disposition','Disposition','disposition'],['location','Location','text'],['status','Status','taskstatus']],
       blank: { tag:'', part:'', condition:'', disposition:'RETAIN', location:'', status:'NOT STARTED' }
+    },
+    disassemblyLog: {
+      columns: [['location','Location','text'],['part','Part','text'],['date','Date','date'],['description','Description','textarea'],['faults','Issues / faults found','textarea'],['photoId','Photo link','disassemblyphoto']],
+      blank: { location:'', part:'', date:'', description:'', faults:'', photoId:'' }
     },
     body: {
       columns: [['area','Area','text'],['condition','Condition / evidence','text'],['strategy','Repair strategy','text'],['specialist','Specialist','text'],['status','Status','taskstatus']],
@@ -232,6 +237,7 @@ export function initBuildBinder(): void {
           row({priority:'MEDIUM',action:'Set initial scope boundaries and decision gates',owner:'',due:'',status:'NOT STARTED'})
         ],
         inventory: [],
+        disassemblyLog: [],
         body: ['Front structure / panels','Cabin / floor / sills','Rear structure / quarters','Doors / hinges / gaps','Boot / bonnet / closures','Underbody / mounts'].map(area=>row({area,condition:'',strategy:'',specialist:'',status:'NOT STARTED'})),
         rustRepairs: [],
         chassis: ['Front suspension','Rear suspension','Steering','Brakes','Wheels / tyres','Bearings / hubs'].map(system=>row({system,existing:'',planned:'',parts:'',verification:'',status:'NOT STARTED'})),
@@ -247,7 +253,7 @@ export function initBuildBinder(): void {
         references: [], refinements: []
       },
       photos: {},
-      photoGalleries: { identity:[], baseline:[], body:[], interior:[], milestones:[], electrical:[] },
+      photoGalleries: { identity:[], baseline:[], body:[], interior:[], milestones:[], electrical:[], disassembly:[] },
       projectImage: null,
       preferences: { density:'standard', contrast:'standard', accent:'blueprint', printScope:'current', costTracking:true }
     };
@@ -269,7 +275,7 @@ export function initBuildBinder(): void {
       acceptance: acceptanceChecks.map(label=>({label,done:false})), prestart: preStartChecks.map(label=>({label,done:false})), handover: handoverChecks.map(label=>({label,done:false}))
     };
     project.projectImage = null;
-    project.photoGalleries = { identity:[], baseline:[], body:[], interior:[], milestones:[] };
+    project.photoGalleries = { identity:[], baseline:[], body:[], interior:[], milestones:[], electrical:[], disassembly:[] };
     return project;
   }
 
@@ -306,6 +312,7 @@ export function initBuildBinder(): void {
     if(!Array.isArray(project.tables.rustRepairs)) project.tables.rustRepairs=[];
     if(!Array.isArray(project.tables.consumables)) project.tables.consumables=[];
     if(!Array.isArray(project.tables.electricalParts)) project.tables.electricalParts=[];
+    if(!Array.isArray(project.tables.disassemblyLog)) project.tables.disassemblyLog=[];
     project.photos=project.photos||{};
     project.photoGalleries=project.photoGalleries||{};
     Object.keys(galleryDefinitions).forEach(key=>{ if(!Array.isArray(project.photoGalleries[key])) project.photoGalleries[key]=[]; });
@@ -485,8 +492,13 @@ export function initBuildBinder(): void {
           :'<span class="electrical-part-photo-empty">No photo linked</span>';
         return `<td><div class="electrical-part-photo-cell">${photoButton}<button class="electrical-part-photo-picker" type="button" data-electrical-photo-picker="${esc(r._id)}" aria-label="Add or link a photo for ${esc(r.part||'electrical part')}" title="Add or link a photo">▾</button></div></td>`;
       }
+      if(type==='disassemblyphoto'){
+        const photos=p.photoGalleries?.disassembly||[];
+        return `<td><select data-disassembly-photo-link aria-label="Photo for ${esc(r.part||r.location||'disassembly record')}" ${photos.length?'':'disabled'}><option value="">${photos.length?'No photo linked':'Add a disassembly photo below'}</option>${photos.map(photo=>`<option value="${esc(photo.id)}" ${value===photo.id?'selected':''}>${esc(photo.caption||photo.name||'Untitled photo')}</option>`).join('')}</select></td>`;
+      }
       if (['status','priority','risk','taskstatus','procurementstatus','disposition'].includes(type)) return `<td><select aria-label="${esc(label)}" data-table="${name}" data-key="${key}">${selectOptions(type,value)}</select></td>`;
       if (type==='text') return `<td><textarea class="auto-grow auto-grow-compact" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="1" placeholder="Enter…">${esc(value)}</textarea></td>`;
+      if (type==='textarea') return `<td><textarea class="auto-grow" aria-label="${esc(label)}" data-table="${name}" data-key="${key}" rows="2" placeholder="Enter…">${esc(value)}</textarea></td>`;
       return `<td><input aria-label="${esc(label)}" data-table="${name}" data-key="${key}" type="${type}" value="${esc(value)}" placeholder="Enter…" ${type==='number'?'step="0.01"':''}></td>`;
     }).join('')}<td><button class="row-delete" data-delete-row="${name}" aria-label="Delete row" title="Delete row">×</button></td></tr>`).join('');
     return `<div class="table-wrap"><table class="data-table"><thead><tr>${headers}</tr></thead><tbody>${body || `<tr><td colspan="${columns.length+1}"><div class="empty-state"><h3>${esc(emptyText)}</h3><p>Add the first record when it is needed.</p></div></td></tr>`}</tbody></table></div><div class="table-actions"><button class="button ghost small" data-add-row="${name}">＋ Add row</button></div>`;
@@ -609,7 +621,7 @@ export function initBuildBinder(): void {
 
   function disassembly() {
     return header('05','Disassembly & parts','Make every removed item findable, identifiable and re-installable.')+
-    `<div class="section-grid">${card('Tagging convention',`<div class="form-grid">${field('Project prefix','tagPrefix')}${field('Area codes','areaCodes')}${field('Container label format','containerFormat')}${field('Tag example','tagExample',{placeholder:'e.g. WPXA-BDY-001'})}</div>`,{span:'half'})}${card('Removal discipline',checklist('disassembly'),{span:'half'})}${card('Parts inventory & storage map',table('inventory','Parts inventory','No parts have been catalogued yet'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Loss prevention</strong>Do not use “miscellaneous” as a permanent category. Every loose fastener, bracket, clip and shim should inherit the assembly tag.</div></div>`;
+    `<div class="section-grid">${card('Tagging convention',`<div class="form-grid">${field('Project prefix','tagPrefix')}${field('Area codes','areaCodes')}${field('Container label format','containerFormat')}${field('Tag example','tagExample',{placeholder:'e.g. WPXA-BDY-001'})}</div>`,{span:'half'})}${card('Removal discipline',checklist('disassembly'),{span:'half'})}${card('Parts inventory & storage map',table('inventory','Parts inventory','No parts have been catalogued yet'),{span:'span-12'})}${card('Disassembly log',table('disassemblyLog','Areas / parts disassembled','No disassembly records yet'),{span:'span-12'})}${card('Disassembly photos',photoGallery('disassembly'),{span:'span-12'})}<div class="callout" style="grid-column:span 12"><strong>Loss prevention</strong>Do not use “miscellaneous” as a permanent category. Every loose fastener, bracket, clip and shim should inherit the assembly tag.</div></div>`;
   }
 
   function body() {
@@ -933,6 +945,7 @@ export function initBuildBinder(): void {
       const project=activeProject();
       project.photoGalleries[gallery]=project.photoGalleries[gallery].filter(photo=>photo.id!==photoId);
       if(gallery==='electrical') (project.tables.electricalParts||[]).forEach(part=>{ if(part.photoId===photoId) part.photoId=''; });
+      if(gallery==='disassembly') (project.tables.disassemblyLog||[]).forEach(record=>{ if(record.photoId===photoId) record.photoId=''; });
       queueSave('Photo removed');
       closeModal();
       render();
@@ -980,6 +993,7 @@ export function initBuildBinder(): void {
         queueSave('Photo caption updated');
         app.querySelectorAll(`[data-condition-photo-select] option[value="${photo.id}"]`).forEach(option=>option.textContent=photo.caption||photo.name||'Untitled photo');
         app.querySelectorAll(`[data-electrical-photo-label][data-photo-id="${photo.id}"]`).forEach(label=>label.textContent=photo.caption||photo.name||'View photo');
+        app.querySelectorAll(`[data-disassembly-photo-link] option[value="${photo.id}"]`).forEach(option=>option.textContent=photo.caption||photo.name||'Untitled photo');
       }
     }
     if(e.target.matches('[data-checklist-label]')){
@@ -1005,6 +1019,15 @@ export function initBuildBinder(): void {
     if(e.target.matches('[data-condition-photo-select]')&&e.target.value){
       document.getElementById(`photo-${e.target.value}`)?.scrollIntoView({behavior:'smooth',block:'center'});
       e.target.value='';
+    }
+    if(e.target.matches('[data-disassembly-photo-link]')){
+      const rowEl=e.target.closest('tr');
+      const record=activeProject().tables.disassemblyLog.find(item=>item._id===rowEl.dataset.row);
+      if(record){
+        record.photoId=e.target.value;
+        queueSave('Disassembly photo link updated');
+        if(record.photoId) document.getElementById(`photo-${record.photoId}`)?.scrollIntoView({behavior:'smooth',block:'center'});
+      }
     }
     if(e.target===projectSelect){ state.activeProjectId=e.target.value; localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); render(); toast('Project switched',activeProject().meta.name); }
     if(e.target.id==='importFile' && e.target.files[0]) importJson(e.target.files[0]);
